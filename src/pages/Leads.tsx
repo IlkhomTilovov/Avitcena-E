@@ -271,16 +271,9 @@ const Leads = () => {
       let startDate = new Date();
 
       switch (filterTimeRange) {
-        case "daily": {
-          // Sellers go home around 19:00 and don't pick leads back up until
-          // the next morning, so "Bugun" means the current business day —
-          // yesterday 19:00 through today 19:00 — not calendar midnight.
-          const boundary = new Date(now);
-          boundary.setHours(19, 0, 0, 0);
-          if (now < boundary) boundary.setDate(boundary.getDate() - 1);
-          startDate = boundary;
+        case "daily":
+          startDate = new Date(now.getFullYear(), now.getMonth(), now.getDate());
           break;
-        }
         case "1week":
           startDate.setDate(now.getDate() - 7);
           break;
