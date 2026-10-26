@@ -28,6 +28,7 @@ import StageManagement from "@/components/StageManagement";
 import SortableStageColumn from "@/components/SortableStageColumn";
 import AddStageColumn from "@/components/AddStageColumn";
 import { StageChangeDialog } from "@/components/StageChangeDialog";
+import { SoldOrderDialog } from "@/components/SoldOrderDialog";
 import { LEAD_SOURCE_OPTIONS } from "@/lib/leadDisplay";
 import {
   DropdownMenu,
@@ -86,8 +87,11 @@ const Leads = () => {
     newStageName: string;
     sellerId: string;
   } | null>(null);
+  const [pendingSoldOrder, setPendingSoldOrder] = useState<{ lead: any; newStageId: string } | null>(null);
 
-  // Stages where a drag/select change is applied immediately, without the mandatory comment dialog.
+  // Stages where a drag/select change skips the mandatory comment dialog.
+  // "Sotildi" goes through SoldOrderDialog instead (see below), which collects
+  // order details and sends the Telegram notification in that same step.
   // Matched by name since stage ids are generated per-environment.
   const EXEMPT_STAGE_NAMES = ["Sotildi"];
 
@@ -471,17 +475,11 @@ const Leads = () => {
 
     const newStage = stages.find(s => s.id === newStageId);
 
-    // Check if exempt stage - direct change allowed
+    // Check if exempt stage
     if (EXEMPT_STAGE_NAMES.includes(newStage?.name || "")) {
-      try {
-        await api.leads.update(leadId, { stage: newStageId });
-
-        toast.success("Lid bosqichi yangilandi!");
-        fetchLeads();
-      } catch (error) {
-        console.error("Error updating lead stage:", error);
-        toast.error("Lid bosqichini yangilashda xato");
-      }
+      // "Sotildi": collect order details (and send the Telegram notification)
+      // in the same step, instead of applying the stage change right away.
+      setPendingSoldOrder({ lead, newStageId });
     } else {
       // Open dialog for mandatory comment and task
       setPendingStageChange({
@@ -510,17 +508,9 @@ const Leads = () => {
 
     const newStage = stages.find(s => s.id === newStageId);
 
-    // Check if exempt stage - direct change allowed
+    // Check if exempt stage
     if (EXEMPT_STAGE_NAMES.includes(newStage?.name || "")) {
-      try {
-        await api.leads.update(leadId, { stage: newStageId });
-
-        toast.success("Lid bosqichi yangilandi!");
-        fetchLeads();
-      } catch (error) {
-        console.error("Error updating lead stage:", error);
-        toast.error("Lid bosqichini yangilashda xato");
-      }
+      setPendingSoldOrder({ lead, newStageId });
     } else {
       // Open dialog for mandatory comment and task
       setPendingStageChange({
@@ -1030,6 +1020,20 @@ const Leads = () => {
           sellerId={pendingStageChange.sellerId}
           onSuccess={() => {
             setPendingStageChange(null);
+            fetchLeads();
+          }}
+        />
+      )}
+
+      {pendingSoldOrder && (
+        <SoldOrderDialog
+          open={!!pendingSoldOrder}
+          onOpenChange={(open) => !open && setPendingSoldOrder(null)}
+          lead={pendingSoldOrder.lead}
+          newStageId={pendingSoldOrder.newStageId}
+          sellerName={sellers.find((s) => s.id === pendingSoldOrder.lead.seller_id)?.full_name || "Noma'lum"}
+          onSuccess={() => {
+            setPendingSoldOrder(null);
             fetchLeads();
           }}
         />

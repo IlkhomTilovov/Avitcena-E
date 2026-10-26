@@ -39,6 +39,7 @@ import {
 } from "lucide-react";
 import { Calendar } from "@/components/ui/calendar";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
+import { SoldOrderDialog } from "@/components/SoldOrderDialog";
 
 interface LeadDetailsDialogProps {
   lead: any;
@@ -86,6 +87,8 @@ const LeadDetailsDialog = ({ lead, open, onOpenChange, onUpdate, sellers, stages
   const [orderItems, setOrderItems] = useState<{ product_name: string; quantity: number; price: number }[]>([]);
   const [editingName, setEditingName] = useState(false);
   const [nameDraft, setNameDraft] = useState(lead?.customer_name || "");
+  const [soldDialogOpen, setSoldDialogOpen] = useState(false);
+  const [pendingSoldStageId, setPendingSoldStageId] = useState<string | null>(null);
   const [taskForm, setTaskForm] = useState({
     title: "",
     description: "",
@@ -355,23 +358,33 @@ const LeadDetailsDialog = ({ lead, open, onOpenChange, onUpdate, sellers, stages
   };
 
   const handleUpdateStage = async (newStageId: string) => {
+    // "Sotildi" now goes through SoldOrderDialog instead of applying right
+    // away, so the order details (and the Telegram notification) are
+    // collected in the same action instead of a separate trip to "Barcha
+    // zakazlar" afterward. Leaving selectedStage untouched here means the
+    // stage <Select> just reverts to its current value if the dialog is cancelled.
+    if (stages.find((s) => s.id === newStageId)?.name === "Sotildi") {
+      setPendingSoldStageId(newStageId);
+      setSoldDialogOpen(true);
+      return;
+    }
+
     try {
       await api.leads.update(lead.id, { stage: newStageId });
       setSelectedStage(newStageId);
       toast.success("Bosqich o'zgartirildi");
       onUpdate();
-
-      // Switching to "Sotildi" right here reveals the products section
-      // immediately (isSoldStage reacts to local selectedStage), but the
-      // order behind it was only just auto-created server-side — load it
-      // now instead of waiting for the dialog to be reopened.
-      if (stages.find((s) => s.id === newStageId)?.name === "Sotildi") {
-        fetchOrderData();
-      }
     } catch (error) {
       console.error("Error updating stage:", error);
       toast.error("Bosqichni o'zgartirishda xato");
     }
+  };
+
+  const handleSoldOrderSuccess = () => {
+    if (pendingSoldStageId) setSelectedStage(pendingSoldStageId);
+    setPendingSoldStageId(null);
+    onUpdate();
+    fetchOrderData();
   };
 
   const handleSaveName = async () => {
@@ -416,6 +429,7 @@ const LeadDetailsDialog = ({ lead, open, onOpenChange, onUpdate, sellers, stages
   if (!lead) return null;
 
   return (
+    <>
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="flex h-[88vh] max-w-5xl flex-col gap-0 overflow-hidden p-0 sm:rounded-xl">
         <DialogTitle className="sr-only">{lead.customer_name}</DialogTitle>
@@ -1033,6 +1047,18 @@ const LeadDetailsDialog = ({ lead, open, onOpenChange, onUpdate, sellers, stages
         </div>
       </DialogContent>
     </Dialog>
+
+      {pendingSoldStageId && (
+        <SoldOrderDialog
+          open={soldDialogOpen}
+          onOpenChange={setSoldDialogOpen}
+          lead={lead}
+          newStageId={pendingSoldStageId}
+          sellerName={sellerName(lead.seller_id)}
+          onSuccess={handleSoldOrderSuccess}
+        />
+      )}
+    </>
   );
 };
 
