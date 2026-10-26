@@ -87,6 +87,8 @@ const LeadDetailsDialog = ({ lead, open, onOpenChange, onUpdate, sellers, stages
   const [orderItems, setOrderItems] = useState<{ product_name: string; quantity: number; price: number }[]>([]);
   const [editingName, setEditingName] = useState(false);
   const [nameDraft, setNameDraft] = useState(lead?.customer_name || "");
+  const [editingPhone, setEditingPhone] = useState(false);
+  const [phoneDraft, setPhoneDraft] = useState(lead?.customer_phone || "");
   const [soldDialogOpen, setSoldDialogOpen] = useState(false);
   const [pendingSoldStageId, setPendingSoldStageId] = useState<string | null>(null);
   const [taskForm, setTaskForm] = useState({
@@ -120,6 +122,8 @@ const LeadDetailsDialog = ({ lead, open, onOpenChange, onUpdate, sellers, stages
       setSelectedProducts(lead.product_names || []);
       setNameDraft(lead.customer_name || "");
       setEditingName(false);
+      setPhoneDraft(lead.customer_phone || "");
+      setEditingPhone(false);
       fetchProducts();
 
       // A lead auto-creates its order the moment it enters "Sotildi" (see
@@ -406,6 +410,24 @@ const LeadDetailsDialog = ({ lead, open, onOpenChange, onUpdate, sellers, stages
     }
   };
 
+  const handleSavePhone = async () => {
+    const trimmed = phoneDraft.trim();
+    if (trimmed === (lead.customer_phone || "")) {
+      setEditingPhone(false);
+      return;
+    }
+
+    try {
+      await api.leads.update(lead.id, { customer_phone: trimmed || null });
+      toast.success("Telefon raqami saqlandi");
+      setEditingPhone(false);
+      onUpdate();
+    } catch (error) {
+      console.error("Error updating phone:", error);
+      toast.error("Telefon raqamini saqlashda xato");
+    }
+  };
+
   const handleCopyPhone = async () => {
     if (!lead?.customer_phone) return;
     try {
@@ -499,8 +521,32 @@ const LeadDetailsDialog = ({ lead, open, onOpenChange, onUpdate, sellers, stages
             <div className="mt-4 space-y-2.5 text-sm">
               <div className="flex items-center gap-2">
                 <Phone className="h-4 w-4 shrink-0 text-muted-foreground" />
-                <span className="flex-1 truncate">{lead.customer_phone || "—"}</span>
-                {lead.customer_phone && (
+                {editingPhone ? (
+                  <Input
+                    autoFocus
+                    value={phoneDraft}
+                    onChange={(e) => setPhoneDraft(e.target.value)}
+                    onBlur={handleSavePhone}
+                    onKeyDown={(e) => {
+                      if (e.key === "Enter") handleSavePhone();
+                      if (e.key === "Escape") {
+                        setEditingPhone(false);
+                        setPhoneDraft(lead.customer_phone || "");
+                      }
+                    }}
+                    placeholder="+998 XX XXX XX XX"
+                    className="h-7 flex-1 text-sm"
+                  />
+                ) : (
+                  <button
+                    type="button"
+                    onClick={() => setEditingPhone(true)}
+                    className="flex-1 truncate text-left hover:underline"
+                  >
+                    {lead.customer_phone || "—"}
+                  </button>
+                )}
+                {lead.customer_phone && !editingPhone && (
                   <button type="button" onClick={handleCopyPhone} className="shrink-0 rounded border p-1 text-muted-foreground hover:text-foreground">
                     <Copy className="h-3.5 w-3.5" />
                   </button>

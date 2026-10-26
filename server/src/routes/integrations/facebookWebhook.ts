@@ -101,6 +101,14 @@ const humanize = (raw: string) => {
   return text ? text.charAt(0).toUpperCase() + text.slice(1) : text;
 };
 
+const phoneDigits = (s: string) => s.replace(/\D/g, "");
+// A plausible local or international phone number, loosely — long enough to
+// not be a stray numeric answer, short enough to not be, say, an order ID.
+const looksLikePhone = (s: string) => {
+  const d = phoneDigits(s);
+  return d.length >= 9 && d.length <= 13;
+};
+
 function pickFields(fieldData: FieldDatum[]) {
   const get = (...names: string[]) => {
     for (const n of names) {
@@ -120,8 +128,30 @@ function pickFields(fieldData: FieldDatum[]) {
     "full_name", "full name", "name", "first_name", "first name", "last_name", "last name",
     "phone_number", "phone number", "phone", "email",
   ]);
+
+  let phone = get("phone_number", "phone number", "phone") || null;
+
+  // Forms with a custom (non-built-in) phone question — e.g. advertiser wrote
+  // their own "Telefon raqamingiz?" / "Номер телефона" field instead of using
+  // Meta's built-in phone field type — don't match any of the names above, so
+  // the number above never gets found and the lead is saved with no phone at
+  // all even though it's sitting right there in the raw answers. Fall back to
+  // whichever custom answer actually looks like a phone number, preferring
+  // one that already carries the country code (+998...).
+  const usedAsPhone = new Set<string>();
+  if (!phone) {
+    const candidates = fieldData
+      .map((f) => ({ fieldName: f.name?.toLowerCase(), value: f.values?.[0]?.trim() || "" }))
+      .filter((f) => !known.has(f.fieldName) && f.value && looksLikePhone(f.value));
+    const best = candidates.find((c) => phoneDigits(c.value).startsWith("998")) || candidates[0];
+    if (best) {
+      phone = best.value;
+      usedAsPhone.add(best.fieldName);
+    }
+  }
+
   const formAnswers = fieldData
-    .filter((f) => !known.has(f.name?.toLowerCase()))
+    .filter((f) => !known.has(f.name?.toLowerCase()) && !usedAsPhone.has(f.name?.toLowerCase()))
     .map((f) => ({
       question: humanize(f.name),
       answer: (f.values || []).map(humanize).join(", "),
@@ -129,7 +159,7 @@ function pickFields(fieldData: FieldDatum[]) {
 
   return {
     name,
-    phone: get("phone_number", "phone number", "phone") || null,
+    phone,
     email: get("email") || null,
     formAnswers,
   };
