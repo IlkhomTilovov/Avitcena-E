@@ -2,6 +2,7 @@ import { useEffect, useState } from "react";
 import { api, ApiError } from "@/lib/api";
 import { useAuth } from "@/hooks/useAuth";
 import DashboardLayout from "@/components/DashboardLayout";
+import LeadDetailsDialog from "@/components/LeadDetailsDialog";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
@@ -36,6 +37,11 @@ const Tasks = () => {
   const [loading, setLoading] = useState(true);
   const [dialogOpen, setDialogOpen] = useState(false);
   const [overdueCount, setOverdueCount] = useState(0);
+  const [leads, setLeads] = useState<any[]>([]);
+  const [sellers, setSellers] = useState<any[]>([]);
+  const [stages, setStages] = useState<any[]>([]);
+  const [selectedLead, setSelectedLead] = useState<any>(null);
+  const [leadDialogOpen, setLeadDialogOpen] = useState(false);
   const [formData, setFormData] = useState({
     title: "",
     description: "",
@@ -125,9 +131,17 @@ const Tasks = () => {
     try {
       // The backend already scopes the list to the caller's own tasks (seller),
       // or to the whole company for admin/rop, so no role check is needed here.
-      const [taskRows, profiles, leads] = await Promise.all([api.tasks.list(), api.profiles.list(), api.leads.list()]);
+      const [taskRows, profiles, allLeads, allStages] = await Promise.all([
+        api.tasks.list(),
+        api.profiles.list(),
+        api.leads.list(),
+        api.stages.list(),
+      ]);
+      setSellers(profiles);
+      setLeads(allLeads);
+      setStages(allStages);
       const nameBySeller = new Map(profiles.map((p: any) => [p.id, p.full_name]));
-      const leadById = new Map(leads.map((l: any) => [l.id, l]));
+      const leadById = new Map(allLeads.map((l: any) => [l.id, l]));
 
       const enriched = taskRows
         .map((t: any) => {
@@ -188,6 +202,14 @@ const Tasks = () => {
     } catch (error) {
       toast.error(error instanceof ApiError ? error.message : "Xatolik yuz berdi");
     }
+  };
+
+  const openLeadForTask = (task: Task) => {
+    if (!task.lead_id) return;
+    const lead = leads.find((l) => l.id === task.lead_id);
+    if (!lead) return;
+    setSelectedLead(lead);
+    setLeadDialogOpen(true);
   };
 
   if (loading) {
@@ -280,7 +302,10 @@ const Tasks = () => {
               <Card key={task.id} className={task.status === "completed" ? "opacity-60" : ""}>
                 <CardContent className="p-4 sm:p-6">
                   <div className="flex flex-col sm:flex-row items-start justify-between gap-4">
-                    <div className="flex-1 w-full">
+                    <div
+                      className={`flex-1 w-full ${task.lead_id ? "cursor-pointer" : ""}`}
+                      onClick={() => openLeadForTask(task)}
+                    >
                       <h3 className="text-lg font-semibold mb-2">
                         {task.title}
                       </h3>
@@ -306,6 +331,7 @@ const Tasks = () => {
                         {task.leads?.customer_phone && (
                           <a
                             href={`tel:${task.leads.customer_phone}`}
+                            onClick={(e) => e.stopPropagation()}
                             className="text-xs text-primary hover:underline"
                           >
                             Tel: {task.leads.customer_phone}
@@ -340,6 +366,17 @@ const Tasks = () => {
           )}
         </div>
       </div>
+
+      {selectedLead && (
+        <LeadDetailsDialog
+          lead={selectedLead}
+          open={leadDialogOpen}
+          onOpenChange={setLeadDialogOpen}
+          onUpdate={fetchTasks}
+          sellers={sellers}
+          stages={stages}
+        />
+      )}
     </DashboardLayout>
   );
 };
