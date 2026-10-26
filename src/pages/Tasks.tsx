@@ -26,6 +26,7 @@ interface Task {
   };
   leads?: {
     customer_name: string;
+    customer_phone: string | null;
   };
 }
 
@@ -126,14 +127,17 @@ const Tasks = () => {
       // or to the whole company for admin/rop, so no role check is needed here.
       const [taskRows, profiles, leads] = await Promise.all([api.tasks.list(), api.profiles.list(), api.leads.list()]);
       const nameBySeller = new Map(profiles.map((p: any) => [p.id, p.full_name]));
-      const nameByLead = new Map(leads.map((l: any) => [l.id, l.customer_name]));
+      const leadById = new Map(leads.map((l: any) => [l.id, l]));
 
       const enriched = taskRows
-        .map((t: any) => ({
-          ...t,
-          profiles: { full_name: nameBySeller.get(t.seller_id) },
-          leads: t.lead_id ? { customer_name: nameByLead.get(t.lead_id) } : undefined,
-        }))
+        .map((t: any) => {
+          const lead = t.lead_id ? leadById.get(t.lead_id) : undefined;
+          return {
+            ...t,
+            profiles: { full_name: nameBySeller.get(t.seller_id) },
+            leads: lead ? { customer_name: lead.customer_name, customer_phone: lead.customer_phone } : undefined,
+          };
+        })
         .sort((a: any, b: any) => (a.due_date < b.due_date ? -1 : 1));
 
       setTasks(enriched);
@@ -298,6 +302,14 @@ const Tasks = () => {
                           <p className="text-xs text-muted-foreground">
                             Mijoz: {task.leads.customer_name}
                           </p>
+                        )}
+                        {task.leads?.customer_phone && (
+                          <a
+                            href={`tel:${task.leads.customer_phone}`}
+                            className="text-xs text-primary hover:underline"
+                          >
+                            Tel: {task.leads.customer_phone}
+                          </a>
                         )}
                       </div>
                     </div>
