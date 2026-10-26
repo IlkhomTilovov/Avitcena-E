@@ -124,12 +124,12 @@ export const api = {
     deleteUser: (id: string) => del<{ success: boolean }>(`/admin/users/${id}`),
   },
   employees: {
-    list: (params?: { from?: string; to?: string; role?: string; department?: string; status?: string; search?: string }) => {
+    list: (params?: { from?: string; to?: string; leadFrom?: string; role?: string; department?: string; status?: string; search?: string }) => {
       const qs = new URLSearchParams(Object.entries(params ?? {}).filter(([, v]) => v !== undefined && v !== "") as [string, string][]);
       const suffix = qs.toString() ? `?${qs.toString()}` : "";
       return get<any[]>(`/employees${suffix}`);
     },
-    get: (id: string, params?: { from?: string; to?: string }) => {
+    get: (id: string, params?: { from?: string; to?: string; leadFrom?: string }) => {
       const qs = new URLSearchParams(Object.entries(params ?? {}).filter(([, v]) => v !== undefined && v !== "") as [string, string][]);
       const suffix = qs.toString() ? `?${qs.toString()}` : "";
       return get<any>(`/employees/${id}${suffix}`);

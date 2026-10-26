@@ -11,14 +11,33 @@ router.use(requireAuth);
 const DAY_MS = 24 * 60 * 60 * 1000;
 const toDateStr = (d: Date) => d.toISOString().slice(0, 10);
 
+// Sellers leave for the day around 19:00 (Tashkent local time) and don't pick
+// leads back up until the next morning, so a lead that comes in at, say,
+// 20:00 only actually gets handed to a seller the following business day.
+// Counting it under the calendar date it was created on (midnight-to-midnight)
+// made "how many leads did I get today" wrong for anything after 19:00 —
+// shifting by 10h before taking the UTC date aligns the boundary onto
+// Tashkent's 19:00 cutoff instead (Tashkent = UTC+5, so local 19:00 + 5h
+// local-to-midnight-equivalent = +10h in UTC terms).
+const TASHKENT_BUSINESS_DAY_SHIFT_MS = 10 * 60 * 60 * 1000;
+const toBusinessDateStr = (d: Date) => toDateStr(new Date(d.getTime() + TASHKENT_BUSINESS_DAY_SHIFT_MS));
+
 const parseRange = (req: any) => {
   const now = new Date();
   const to = req.query.to ? new Date(String(req.query.to)) : now;
   const from = req.query.from ? new Date(String(req.query.from)) : new Date(to.getTime() - 29 * DAY_MS);
+  // leadFrom lets the caller pass a separately-aligned lower bound just for
+  // counting leads (see Sellers.tsx), since leads need the 19:00 business-day
+  // cutoff while orders/revenue/tasks keep the plain calendar boundary.
+  const leadFrom = req.query.leadFrom ? new Date(String(req.query.leadFrom)) : from;
   const spanMs = Math.max(to.getTime() - from.getTime(), DAY_MS);
   const prevTo = new Date(from.getTime() - 1);
   const prevFrom = new Date(prevTo.getTime() - spanMs);
-  return { from, to, prevFrom, prevTo };
+  // leadFrom can sit slightly earlier than prevFrom (up to ~19h, for the
+  // 19:00 cutoff) — widen the DB query floor so those leads are actually
+  // fetched, without changing what "previous period" leads are compared against.
+  const leadQueryFrom = leadFrom < prevFrom ? leadFrom : prevFrom;
+  return { from, to, prevFrom, prevTo, leadFrom, leadQueryFrom };
 };
 
 // Sellers are expected to hold at most one operational role in practice, but
@@ -76,7 +95,7 @@ router.get(
     const user = req.user!;
     if (!isAdminOrRop(user)) return res.status(403).json({ error: "Ruxsat yo'q" });
 
-    const { from, to, prevFrom, prevTo } = parseRange(req);
+    const { from, to, prevFrom, prevTo, leadFrom, leadQueryFrom } = parseRange(req);
     const profileIds = await scopedProfileIds(user);
     if (profileIds.length === 0) return res.json([]);
 
@@ -91,7 +110,7 @@ router.get(
       db
         .select()
         .from(schema.leads)
-        .where(and(inArray(schema.leads.sellerId, profileIds), gte(schema.leads.createdAt, prevFrom), lte(schema.leads.createdAt, to))),
+        .where(and(inArray(schema.leads.sellerId, profileIds), gte(schema.leads.createdAt, leadQueryFrom), lte(schema.leads.createdAt, to))),
       db
         .select()
         .from(schema.tasks)
@@ -108,8 +127,10 @@ router.get(
       const role = primaryRole(roles);
 
       const inCurrent = (dateVal: string | Date, field: "order" | "lead" | "task") => {
-        const d = field === "order" ? dateVal : new Date(dateVal as any);
-        return field === "order" ? (dateVal as string) >= toDateStr(from) && (dateVal as string) <= toDateStr(to) : d >= from && d <= to;
+        if (field === "order") return (dateVal as string) >= toDateStr(from) && (dateVal as string) <= toDateStr(to);
+        const d = new Date(dateVal as any);
+        const start = field === "lead" ? leadFrom : from;
+        return d >= start && d <= to;
       };
 
       const ownOrders = orders.filter((o) => o.sellerId === profile.id);
@@ -199,7 +220,7 @@ router.get(
       return res.status(403).json({ error: "Ruxsat yo'q" });
     }
 
-    const { from, to, prevFrom, prevTo } = parseRange(req);
+    const { from, to, prevFrom, prevTo, leadFrom, leadQueryFrom } = parseRange(req);
     const roleRows = await db.select().from(schema.userRoles).where(eq(schema.userRoles.userId, employeeId));
     const roles = roleRows.map((r) => r.role as AppRole);
     const role = primaryRole(roles);
@@ -214,7 +235,7 @@ router.get(
       db
         .select()
         .from(schema.leads)
-        .where(and(eq(schema.leads.sellerId, employeeId), gte(schema.leads.createdAt, prevFrom), lte(schema.leads.createdAt, to)))
+        .where(and(eq(schema.leads.sellerId, employeeId), gte(schema.leads.createdAt, leadQueryFrom), lte(schema.leads.createdAt, to)))
         .orderBy(desc(schema.leads.createdAt)),
       db
         .select()
@@ -233,8 +254,8 @@ router.get(
     const soldStage = stages.find((s) => s.name === "Sotildi");
     const currentOrders = allOrders.filter((o) => o.orderDate >= toDateStr(from) && o.orderDate <= toDateStr(to));
     const previousOrders = allOrders.filter((o) => !(o.orderDate >= toDateStr(from) && o.orderDate <= toDateStr(to)));
-    const currentLeads = allLeads.filter((l) => l.createdAt >= from && l.createdAt <= to);
-    const previousLeads = allLeads.filter((l) => !(l.createdAt >= from && l.createdAt <= to));
+    const currentLeads = allLeads.filter((l) => l.createdAt >= leadFrom && l.createdAt <= to);
+    const previousLeads = allLeads.filter((l) => !(l.createdAt >= leadFrom && l.createdAt <= to));
     const currentTasks = allTasks.filter((t) => t.dueDate >= from && t.dueDate <= to);
 
     const metrics = computeMetrics(currentOrders, currentLeads, currentTasks, soldStage?.id);
@@ -265,7 +286,7 @@ router.get(
     for (let t = from.getTime(); t <= to.getTime(); t += DAY_MS) {
       const dateStr = toDateStr(new Date(t));
       const dayOrders = currentOrders.filter((o) => o.orderDate === dateStr);
-      const dayLeads = currentLeads.filter((l) => toDateStr(new Date(l.createdAt)) === dateStr);
+      const dayLeads = currentLeads.filter((l) => toBusinessDateStr(new Date(l.createdAt)) === toBusinessDateStr(new Date(t)));
       const dayTasksCompleted = currentTasks.filter((t2) => t2.completedAt && toDateStr(new Date(t2.completedAt)) === dateStr);
       dailyBuckets.push({
         date: dateStr,

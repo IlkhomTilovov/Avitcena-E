@@ -63,6 +63,19 @@ const getPeriodRange = (period: DashboardPeriod, customRange?: DateRange) => {
   }
 };
 
+// Sellers go home around 19:00 and don't pick leads back up until the next
+// morning, so for the "Lidlar" count specifically, "Bugun" should mean the
+// current business day — yesterday 19:00 through today 19:00 — not calendar
+// midnight. Only leads use this; orders/revenue/tasks keep the normal range.
+const getLeadPeriodStart = (period: DashboardPeriod, periodStart: Date) => {
+  if (period !== "today") return periodStart;
+  const now = new Date();
+  const boundary = new Date(now);
+  boundary.setHours(19, 0, 0, 0);
+  if (now < boundary) boundary.setDate(boundary.getDate() - 1);
+  return boundary;
+};
+
 const Sellers = () => {
   const [employees, setEmployees] = useState<EmployeeRow[]>([]);
   const [loading, setLoading] = useState(true);
@@ -91,6 +104,7 @@ const Sellers = () => {
   }, [rolesLoading, isAdminOrRop, navigate]);
 
   const { start: periodStart, end: periodEnd } = useMemo(() => getPeriodRange(period, customRange), [period, customRange]);
+  const leadPeriodStart = useMemo(() => getLeadPeriodStart(period, periodStart), [period, periodStart]);
 
   useEffect(() => {
     if (!rolesLoading && isAdminOrRop) {
@@ -101,7 +115,7 @@ const Sellers = () => {
 
   const fetchEmployees = async () => {
     try {
-      const data = await api.employees.list({ from: periodStart.toISOString(), to: periodEnd.toISOString() });
+      const data = await api.employees.list({ from: periodStart.toISOString(), to: periodEnd.toISOString(), leadFrom: leadPeriodStart.toISOString() });
       setEmployees(data);
     } catch (error) {
       toast.error("Xatolik: " + (error instanceof ApiError ? error.message : ""));

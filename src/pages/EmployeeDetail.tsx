@@ -50,6 +50,18 @@ const getPeriodRange = (period: DashboardPeriod, customRange?: DateRange) => {
   }
 };
 
+// Keep "Lidlar" consistent with the /sellers list: sellers go home around
+// 19:00, so "Bugun" should count leads from the current business day
+// (yesterday 19:00 - today 19:00), not calendar midnight.
+const getLeadPeriodStart = (period: DashboardPeriod, periodStart: Date) => {
+  if (period !== "today") return periodStart;
+  const now = new Date();
+  const boundary = new Date(now);
+  boundary.setHours(19, 0, 0, 0);
+  if (now < boundary) boundary.setDate(boundary.getDate() - 1);
+  return boundary;
+};
+
 const ORDER_STATUS_LABELS: Record<string, string> = { pending: "Jarayonda", delivered: "Tugallandi", cancelled: "Bekor qilindi" };
 const TASK_STATUS_LABELS: Record<string, string> = { pending: "Kutilmoqda", completed: "Bajarildi" };
 
@@ -140,6 +152,7 @@ const EmployeeDetail = () => {
   }, [rolesLoading, canView, navigate]);
 
   const { start: periodStart, end: periodEnd } = useMemo(() => getPeriodRange(period, customRange), [period, customRange]);
+  const leadPeriodStart = useMemo(() => getLeadPeriodStart(period, periodStart), [period, periodStart]);
 
   useEffect(() => {
     if (!id || !canView) return;
@@ -150,7 +163,7 @@ const EmployeeDetail = () => {
   const fetchDetail = async () => {
     try {
       setLoading(true);
-      const result = await api.employees.get(id!, { from: periodStart.toISOString(), to: periodEnd.toISOString() });
+      const result = await api.employees.get(id!, { from: periodStart.toISOString(), to: periodEnd.toISOString(), leadFrom: leadPeriodStart.toISOString() });
       setData(result);
     } catch (error) {
       toast.error(error instanceof ApiError ? error.message : "Ma'lumotlarni yuklashda xato");
