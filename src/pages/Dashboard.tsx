@@ -207,17 +207,30 @@ const Dashboard = () => {
       const date = subDays(new Date(), 6 - i);
       const dateStr = format(date, "yyyy-MM-dd");
       const dayOrders = ownOrders.filter((o) => o.order_date === dateStr);
-      const dayLeads = ownLeads.filter((l) => l.created_at && format(parseISO(l.created_at), "yyyy-MM-dd") === dateStr);
-      const sifatsizLeads = dayLeads.filter((l) => l.stage === sifatsizStageId).length;
       return {
         name: format(date, "dd MMM"),
         revenue: dayOrders.reduce((sum, o) => sum + Number(o.total_amount), 0),
         orders: dayOrders.length,
+      };
+    });
+  }, [ownOrders]);
+
+  // The lead-quality chart gets its own 30-day window (unlike last7 above,
+  // which the revenue chart and stat-card sparklines still use at 7 days).
+  const LEAD_QUALITY_DAYS = 30;
+  const leadQualityTrend = useMemo(() => {
+    return Array.from({ length: LEAD_QUALITY_DAYS }, (_, i) => {
+      const date = subDays(new Date(), LEAD_QUALITY_DAYS - 1 - i);
+      const dateStr = format(date, "yyyy-MM-dd");
+      const dayLeads = ownLeads.filter((l) => l.created_at && format(parseISO(l.created_at), "yyyy-MM-dd") === dateStr);
+      const sifatsizLeads = dayLeads.filter((l) => l.stage === sifatsizStageId).length;
+      return {
+        name: format(date, "dd MMM"),
         sifatliLeads: dayLeads.length - sifatsizLeads,
         sifatsizLeads,
       };
     });
-  }, [ownOrders, ownLeads, sifatsizStageId]);
+  }, [ownLeads, sifatsizStageId]);
 
   const dateRangeLabel =
     format(periodStart, "yyyy-MM-dd") === format(periodEnd, "yyyy-MM-dd")
@@ -387,14 +400,14 @@ const Dashboard = () => {
           <Card className="xl:col-span-6">
             <CardHeader>
               <CardTitle>Lidlar sifati</CardTitle>
-              <p className="text-sm text-muted-foreground">So'nggi 7 kun — sifatli va sifatsiz lidlar</p>
+              <p className="text-sm text-muted-foreground">So'nggi 1 oy — sifatli va sifatsiz lidlar</p>
             </CardHeader>
             <CardContent>
               <div className="h-[280px]">
                 <ResponsiveContainer width="100%" height="100%">
-                  <LineChart data={last7}>
+                  <LineChart data={leadQualityTrend}>
                     <CartesianGrid strokeDasharray="3 3" vertical={false} />
-                    <XAxis dataKey="name" tick={{ fontSize: 12 }} />
+                    <XAxis dataKey="name" tick={{ fontSize: 12 }} interval={3} />
                     <YAxis allowDecimals={false} tick={{ fontSize: 12 }} />
                     <Tooltip formatter={(value: number, key: string) => [`${value} ta`, key === "sifatliLeads" ? "Sifatli lidlar" : "Sifatsiz lidlar"]} />
                     <Legend formatter={(v) => (v === "sifatliLeads" ? "Sifatli lidlar" : "Sifatsiz lidlar")} />
