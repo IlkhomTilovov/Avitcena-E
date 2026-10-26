@@ -24,6 +24,7 @@ import sheetsRoutes from "./routes/integrations/sheets.js";
 import sheetsWebhookRoutes from "./routes/integrations/sheetsWebhook.js";
 import facebookWebhookRoutes from "./routes/integrations/facebookWebhook.js";
 import { scheduleDailySalesReport } from "./jobs/dailySalesReport.js";
+import { scheduleDailyDeliveryReport } from "./jobs/dailyDeliveryReport.js";
 
 const app = express();
 
@@ -92,4 +93,5 @@ const port = Number(process.env.PORT) || 4000;
 app.listen(port, () => {
   console.log(`Daraja ERP backend listening on http://localhost:${port}`);
   scheduleDailySalesReport();
+  scheduleDailyDeliveryReport();
 });
