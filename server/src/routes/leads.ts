@@ -88,9 +88,17 @@ router.patch(
     if (!parsed.success) return res.status(400).json({ error: "Noto'g'ri ma'lumot" });
 
     const { price, ...rest } = parsed.data;
+    const isReassignment = rest.sellerId !== undefined && rest.sellerId !== existing.sellerId;
     const [row] = await db
       .update(schema.leads)
-      .set({ ...rest, ...(price !== undefined ? { price: price != null ? String(price) : null } : {}), updatedAt: new Date() })
+      .set({
+        ...rest,
+        ...(price !== undefined ? { price: price != null ? String(price) : null } : {}),
+        // "How many leads did seller X get today" counts from this, not
+        // createdAt — bump it every time the lead actually changes hands.
+        ...(isReassignment ? { sellerAssignedAt: new Date() } : {}),
+        updatedAt: new Date(),
+      })
       .where(eq(schema.leads.id, req.params.id))
       .returning();
 
@@ -160,7 +168,7 @@ router.patch(
     // too, otherwise the order (and its "Barcha zakazlar" / Dastavka entry)
     // keeps showing up for whoever the lead was assigned to when it was sold,
     // not the seller it was just handed to.
-    if (rest.sellerId && rest.sellerId !== existing.sellerId) {
+    if (isReassignment) {
       const [orderToReassign] = await db
         .select({ id: schema.orders.id })
         .from(schema.orders)

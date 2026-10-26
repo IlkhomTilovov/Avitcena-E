@@ -91,7 +91,11 @@ router.get(
       db
         .select()
         .from(schema.leads)
-        .where(and(inArray(schema.leads.sellerId, profileIds), gte(schema.leads.createdAt, prevFrom), lte(schema.leads.createdAt, to))),
+        // "Lidlar" counts when the lead was handed to this seller
+        // (sellerAssignedAt), not when the lead record itself was first
+        // created — a lead can sit around (e.g. from a Facebook webhook)
+        // before an admin actually assigns or reassigns it to someone.
+        .where(and(inArray(schema.leads.sellerId, profileIds), gte(schema.leads.sellerAssignedAt, prevFrom), lte(schema.leads.sellerAssignedAt, to))),
       db
         .select()
         .from(schema.tasks)
@@ -117,10 +121,10 @@ router.get(
       const ownTasks = tasks.filter((t) => t.sellerId === profile.id);
 
       const currentOrders = ownOrders.filter((o) => inCurrent(o.orderDate, "order"));
-      const currentLeads = ownLeads.filter((l) => inCurrent(l.createdAt, "lead"));
+      const currentLeads = ownLeads.filter((l) => inCurrent(l.sellerAssignedAt, "lead"));
       const currentTasks = ownTasks.filter((t) => inCurrent(t.dueDate, "task"));
       const previousOrders = ownOrders.filter((o) => !inCurrent(o.orderDate, "order"));
-      const previousLeads = ownLeads.filter((l) => !inCurrent(l.createdAt, "lead"));
+      const previousLeads = ownLeads.filter((l) => !inCurrent(l.sellerAssignedAt, "lead"));
 
       const metrics = computeMetrics(currentOrders, currentLeads, currentTasks, soldStage?.id);
       const prevMetrics = computeMetrics(previousOrders, previousLeads, [], soldStage?.id);
@@ -214,7 +218,7 @@ router.get(
       db
         .select()
         .from(schema.leads)
-        .where(and(eq(schema.leads.sellerId, employeeId), gte(schema.leads.createdAt, prevFrom), lte(schema.leads.createdAt, to)))
+        .where(and(eq(schema.leads.sellerId, employeeId), gte(schema.leads.sellerAssignedAt, prevFrom), lte(schema.leads.sellerAssignedAt, to)))
         .orderBy(desc(schema.leads.createdAt)),
       db
         .select()
@@ -233,8 +237,8 @@ router.get(
     const soldStage = stages.find((s) => s.name === "Sotildi");
     const currentOrders = allOrders.filter((o) => o.orderDate >= toDateStr(from) && o.orderDate <= toDateStr(to));
     const previousOrders = allOrders.filter((o) => !(o.orderDate >= toDateStr(from) && o.orderDate <= toDateStr(to)));
-    const currentLeads = allLeads.filter((l) => l.createdAt >= from && l.createdAt <= to);
-    const previousLeads = allLeads.filter((l) => !(l.createdAt >= from && l.createdAt <= to));
+    const currentLeads = allLeads.filter((l) => l.sellerAssignedAt >= from && l.sellerAssignedAt <= to);
+    const previousLeads = allLeads.filter((l) => !(l.sellerAssignedAt >= from && l.sellerAssignedAt <= to));
     const currentTasks = allTasks.filter((t) => t.dueDate >= from && t.dueDate <= to);
 
     const metrics = computeMetrics(currentOrders, currentLeads, currentTasks, soldStage?.id);
@@ -265,7 +269,7 @@ router.get(
     for (let t = from.getTime(); t <= to.getTime(); t += DAY_MS) {
       const dateStr = toDateStr(new Date(t));
       const dayOrders = currentOrders.filter((o) => o.orderDate === dateStr);
-      const dayLeads = currentLeads.filter((l) => toDateStr(new Date(l.createdAt)) === dateStr);
+      const dayLeads = currentLeads.filter((l) => toDateStr(new Date(l.sellerAssignedAt)) === dateStr);
       const dayTasksCompleted = currentTasks.filter((t2) => t2.completedAt && toDateStr(new Date(t2.completedAt)) === dateStr);
       dailyBuckets.push({
         date: dateStr,

@@ -146,6 +146,12 @@ export const leads = pgTable("leads", {
   callId: text("call_id"),
   callStatus: text("call_status"),
   callDuration: integer("call_duration"),
+  // When this lead most recently got its seller — set at creation and bumped
+  // on every reassignment (see routes/leads.ts). Separate from createdAt
+  // because a lead can sit around (e.g. from a Facebook webhook) before an
+  // admin actually hands it to a seller, or get reassigned later — "how many
+  // leads did seller X get today" has to count from this, not createdAt.
+  sellerAssignedAt: timestamp("seller_assigned_at", { withTimezone: true }).notNull().defaultNow(),
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
   updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
 });
