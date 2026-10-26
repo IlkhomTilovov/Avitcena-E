@@ -122,12 +122,29 @@ function pickFields(fieldData: FieldDatum[]) {
   const full = get("full_name", "full name", "name");
   const first = get("first_name", "first name");
   const last = get("last_name", "last name");
-  const name = full || [first, last].filter(Boolean).join(" ").trim();
+  let name = full || [first, last].filter(Boolean).join(" ").trim();
 
   const known = new Set([
     "full_name", "full name", "name", "first_name", "first name", "last_name", "last name",
     "phone_number", "phone number", "phone", "email",
   ]);
+
+  // Same story as the phone fallback below: a custom-written name question
+  // (e.g. "Ismingiz?" / "Имя") doesn't match any of Meta's built-in field
+  // names above, so the lead was falling back to the generic "Facebook Lead"
+  // placeholder with the real name sitting unused in the raw answers.
+  const usedAsName = new Set<string>();
+  if (!name) {
+    const nameHints = ["ism", "name", "имя", "fio", "фио"];
+    const candidate = fieldData.find((f) => {
+      const key = f.name?.toLowerCase() || "";
+      return !known.has(key) && nameHints.some((hint) => key.includes(hint)) && f.values?.[0]?.trim();
+    });
+    if (candidate) {
+      name = candidate.values![0].trim();
+      usedAsName.add(candidate.name!.toLowerCase());
+    }
+  }
 
   let phone = get("phone_number", "phone number", "phone") || null;
 
@@ -142,7 +159,7 @@ function pickFields(fieldData: FieldDatum[]) {
   if (!phone) {
     const candidates = fieldData
       .map((f) => ({ fieldName: f.name?.toLowerCase(), value: f.values?.[0]?.trim() || "" }))
-      .filter((f) => !known.has(f.fieldName) && f.value && looksLikePhone(f.value));
+      .filter((f) => !known.has(f.fieldName) && !usedAsName.has(f.fieldName) && f.value && looksLikePhone(f.value));
     const best = candidates.find((c) => phoneDigits(c.value).startsWith("998")) || candidates[0];
     if (best) {
       phone = best.value;
@@ -151,7 +168,7 @@ function pickFields(fieldData: FieldDatum[]) {
   }
 
   const formAnswers = fieldData
-    .filter((f) => !known.has(f.name?.toLowerCase()) && !usedAsPhone.has(f.name?.toLowerCase()))
+    .filter((f) => !known.has(f.name?.toLowerCase()) && !usedAsName.has(f.name?.toLowerCase()) && !usedAsPhone.has(f.name?.toLowerCase()))
     .map((f) => ({
       question: humanize(f.name),
       answer: (f.values || []).map(humanize).join(", "),
