@@ -13,6 +13,7 @@ import {
   ShadingType,
   BorderStyle,
   VerticalAlign,
+  PageOrientation,
 } from "docx";
 
 const REJECTION_REASON_LABELS: Record<string, string> = {
@@ -24,32 +25,107 @@ const REJECTION_REASON_LABELS: Record<string, string> = {
   other: "Boshqa sabab",
 };
 
+const COLORS = {
+  green: "1E7E34",
+  greenBg: "E8F8EE",
+  red: "C0392B",
+  redBg: "FDECEA",
+  gray: "64748B",
+  grayBg: "F1F5F9",
+  ink: "1E293B",
+};
+
 const fmtMoney = (n: number) => Math.round(n).toLocaleString("uz-UZ").replace(/,/g, " ");
 const fmtHours = (from: Date, to: Date) => Math.max(0, Math.round((to.getTime() - from.getTime()) / 3_600_000));
 
-const NO_BORDER = { style: BorderStyle.NONE, size: 0, color: "FFFFFF" };
-const thinBorder = { style: BorderStyle.SINGLE, size: 4, color: "DDDDDD" };
-const cellBorders = { top: thinBorder, bottom: thinBorder, left: thinBorder, right: thinBorder };
+// Landscape Letter (15840 x 12240 twips) with 0.5" margins — leaves exactly
+// enough room for 9 columns without Word squeezing names/addresses onto
+// multiple wrapped lines the way the portrait default did.
+const PAGE_MARGIN = 720;
+const COLUMN_WIDTHS = [500, 1900, 1600, 2300, 1500, 1500, 1500, 1000, 2600];
+const TOTAL_WIDTH = COLUMN_WIDTHS.reduce((a, b) => a + b, 0);
 
-function headerCell(text: string) {
+const NONE = { style: BorderStyle.NONE, size: 0, color: "FFFFFF" };
+const NO_BORDERS = { top: NONE, bottom: NONE, left: NONE, right: NONE };
+const rowLine = { style: BorderStyle.SINGLE, size: 4, color: "E2E8F0" };
+const headerLine = { style: BorderStyle.SINGLE, size: 10, color: COLORS.ink };
+const dataCellBorders = { top: NONE, bottom: rowLine, left: NONE, right: NONE };
+const headerCellBorders = { top: NONE, bottom: headerLine, left: NONE, right: NONE };
+
+function headerCell(text: string, align: (typeof AlignmentType)[keyof typeof AlignmentType] = AlignmentType.LEFT) {
   return new TableCell({
-    borders: cellBorders,
-    shading: { type: ShadingType.CLEAR, fill: "F1F5F9" },
+    borders: headerCellBorders,
     verticalAlign: VerticalAlign.CENTER,
-    children: [new Paragraph({ children: [new TextRun({ text, bold: true, size: 18 })] })],
+    margins: { top: 120, bottom: 120, left: 100, right: 100 },
+    children: [new Paragraph({ alignment: align, children: [new TextRun({ text, bold: true, size: 19, color: COLORS.ink })] })],
   });
 }
 
-function cell(text: string, opts: { bold?: boolean; color?: string; strike?: boolean } = {}) {
+function textCell(
+  text: string,
+  opts: { align?: (typeof AlignmentType)[keyof typeof AlignmentType]; bold?: boolean; color?: string; strike?: boolean; shadeFill?: string } = {},
+) {
   return new TableCell({
-    borders: cellBorders,
+    borders: dataCellBorders,
     verticalAlign: VerticalAlign.CENTER,
+    shading: opts.shadeFill ? { type: ShadingType.CLEAR, fill: opts.shadeFill } : undefined,
+    margins: { top: 90, bottom: 90, left: 100, right: 100 },
     children: [
       new Paragraph({
-        children: [new TextRun({ text, bold: opts.bold, color: opts.color, strike: opts.strike, size: 18 })],
+        alignment: opts.align ?? AlignmentType.LEFT,
+        children: [new TextRun({ text, bold: opts.bold, color: opts.color, strike: opts.strike, size: 19 })],
       }),
     ],
   });
+}
+
+function addressCell(region: string | null, district: string | null, shadeFill?: string) {
+  const lines: Paragraph[] = [];
+  if (region) lines.push(new Paragraph({ children: [new TextRun({ text: region, bold: true, size: 19, color: COLORS.ink })] }));
+  if (district) lines.push(new Paragraph({ children: [new TextRun({ text: district, size: 17, color: COLORS.gray })] }));
+  if (lines.length === 0) lines.push(new Paragraph({ children: [new TextRun({ text: "—", size: 19, color: COLORS.gray })] }));
+  return new TableCell({
+    borders: dataCellBorders,
+    verticalAlign: VerticalAlign.CENTER,
+    shading: shadeFill ? { type: ShadingType.CLEAR, fill: shadeFill } : undefined,
+    margins: { top: 90, bottom: 90, left: 100, right: 100 },
+    children: lines,
+  });
+}
+
+function statusCell(isRejected: boolean, reasonText: string, shadeFill?: string) {
+  const paragraphs = [
+    new Paragraph({
+      children: [new TextRun({ text: isRejected ? "✕ Otkaz" : "✓ Yetkazildi", bold: true, size: 19, color: isRejected ? COLORS.red : COLORS.green })],
+    }),
+  ];
+  if (reasonText) {
+    paragraphs.push(new Paragraph({ children: [new TextRun({ text: reasonText, size: 16, color: COLORS.gray })] }));
+  }
+  return new TableCell({
+    borders: dataCellBorders,
+    verticalAlign: VerticalAlign.CENTER,
+    shading: shadeFill ? { type: ShadingType.CLEAR, fill: shadeFill } : undefined,
+    margins: { top: 90, bottom: 90, left: 100, right: 100 },
+    children: paragraphs,
+  });
+}
+
+// A borderless, lightly-tinted "pill" used for the summary line under the
+// title — the closest a .docx table cell can get to the rounded status
+// chips this report is modeled on (OOXML has no border-radius).
+function pill(text: string, bg: string, color: string) {
+  return new TableCell({
+    borders: NO_BORDERS,
+    shading: { type: ShadingType.CLEAR, fill: bg },
+    verticalAlign: VerticalAlign.CENTER,
+    margins: { top: 140, bottom: 140, left: 220, right: 220 },
+    children: [new Paragraph({ children: [new TextRun({ text, bold: true, size: 19, color })] })],
+  });
+}
+
+function spacer() {
+  return new TableCell({ borders: NO_BORDERS, width: { size: 150, type: WidthType.DXA }, children: [new Paragraph({})] });
 }
 
 /**
@@ -72,7 +148,8 @@ export async function generateDeliveryReportDocx(forDate: Date = new Date()): Pr
         gte(schema.deliveries.statusUpdatedAt, dayStart),
         lt(schema.deliveries.statusUpdatedAt, dayEnd),
       ),
-    );
+    )
+    .orderBy(schema.deliveries.statusUpdatedAt);
 
   const delivered = rows.filter((r) => r.delivery.status === "delivered");
   const rejected = rows.filter((r) => r.delivery.status === "rejected");
@@ -88,7 +165,17 @@ export async function generateDeliveryReportDocx(forDate: Date = new Date()): Pr
 
   const headerRow = new TableRow({
     tableHeader: true,
-    children: ["№", "Ism", "Telefon", "Manzil", "Summa", "Avans", "Qoldiq", "Yo'lda", "Holat"].map(headerCell),
+    children: [
+      headerCell("№", AlignmentType.CENTER),
+      headerCell("Ism"),
+      headerCell("Telefon"),
+      headerCell("Manzil"),
+      headerCell("Summa", AlignmentType.RIGHT),
+      headerCell("Avans", AlignmentType.RIGHT),
+      headerCell("Qoldiq", AlignmentType.RIGHT),
+      headerCell("Yo'lda", AlignmentType.RIGHT),
+      headerCell("Holat"),
+    ],
   });
 
   const dataRows = rows.map((r, i) => {
@@ -97,22 +184,23 @@ export async function generateDeliveryReportDocx(forDate: Date = new Date()): Pr
     const advance = Number(order.advancePayment || 0);
     const remaining = total - advance;
     const isRejected = delivery.status === "rejected";
-    const address = [order.region, order.district].filter(Boolean).join(", ") || "—";
     const hours = delivery.statusUpdatedAt ? fmtHours(order.createdAt, delivery.statusUpdatedAt) : 0;
-    const statusText = isRejected ? "Otkaz" : "Yetkazildi";
     const reasonText = isRejected ? REJECTION_REASON_LABELS[delivery.rejectionReason || ""] || delivery.rejectionReason || "" : "";
+    // A faint zebra tint on alternating rows — subtle enough to still read
+    // as a clean report, not a spreadsheet.
+    const zebra = i % 2 === 1 ? "FAFBFC" : undefined;
 
     return new TableRow({
       children: [
-        cell(String(i + 1)),
-        cell(order.customerName || "—"),
-        cell(order.customerPhone || "—"),
-        cell(address),
-        cell(`${fmtMoney(total)}`),
-        cell(`${fmtMoney(advance)}`),
-        cell(`${fmtMoney(remaining)}`, { strike: isRejected }),
-        cell(`${hours} soat`),
-        cell(reasonText ? `${statusText}\n${reasonText}` : statusText, { color: isRejected ? "C0392B" : "1E7E34", bold: true }),
+        textCell(String(i + 1), { align: AlignmentType.CENTER, shadeFill: zebra }),
+        textCell(order.customerName || "—", { bold: true, shadeFill: zebra }),
+        textCell(order.customerPhone || "—", { shadeFill: zebra }),
+        addressCell(order.region, order.district, zebra),
+        textCell(fmtMoney(total), { align: AlignmentType.RIGHT, bold: true, shadeFill: zebra }),
+        textCell(fmtMoney(advance), { align: AlignmentType.RIGHT, shadeFill: zebra }),
+        textCell(fmtMoney(remaining), { align: AlignmentType.RIGHT, bold: true, strike: isRejected, shadeFill: zebra }),
+        textCell(`${hours} soat`, { align: AlignmentType.RIGHT, color: COLORS.gray, shadeFill: zebra }),
+        statusCell(isRejected, reasonText, zebra),
       ],
     });
   });
@@ -120,56 +208,97 @@ export async function generateDeliveryReportDocx(forDate: Date = new Date()): Pr
   const summaryRows = [
     new TableRow({
       children: [
-        new TableCell({ columnSpan: 4, borders: cellBorders, children: [new Paragraph({ children: [new TextRun({ text: `Yetkazildi: ${delivered.length} ta`, bold: true, color: "1E7E34" })] })] }),
-        cell(fmtMoney(deliveredTotal), { bold: true }),
-        cell(""),
-        cell(fmtMoney(deliveredRemaining), { bold: true }),
-        new TableCell({ columnSpan: 2, borders: cellBorders, children: [new Paragraph({ children: [new TextRun({ text: "kuryer/BTS yig'adi", italics: true, size: 16 })] })] }),
+        new TableCell({
+          columnSpan: 4,
+          borders: dataCellBorders,
+          shading: { type: ShadingType.CLEAR, fill: COLORS.greenBg },
+          margins: { top: 120, bottom: 120, left: 100, right: 100 },
+          children: [new Paragraph({ children: [new TextRun({ text: `Yetkazildi: ${delivered.length} ta`, bold: true, color: COLORS.green })] })],
+        }),
+        textCell(fmtMoney(deliveredTotal), { align: AlignmentType.RIGHT, bold: true, shadeFill: COLORS.greenBg }),
+        textCell("", { shadeFill: COLORS.greenBg }),
+        textCell(fmtMoney(deliveredRemaining), { align: AlignmentType.RIGHT, bold: true, shadeFill: COLORS.greenBg }),
+        new TableCell({
+          columnSpan: 2,
+          borders: dataCellBorders,
+          shading: { type: ShadingType.CLEAR, fill: COLORS.greenBg },
+          margins: { top: 120, bottom: 120, left: 100, right: 100 },
+          children: [new Paragraph({ children: [new TextRun({ text: "kuryer/BTS yig'adi", italics: true, size: 16, color: COLORS.gray })] })],
+        }),
       ],
     }),
     new TableRow({
       children: [
-        new TableCell({ columnSpan: 4, borders: cellBorders, children: [new Paragraph({ children: [new TextRun({ text: `Otkaz: ${rejected.length} ta`, bold: true, color: "C0392B" })] })] }),
-        cell(fmtMoney(rejectedTotal), { bold: true }),
-        cell(fmtMoney(rejectedAdvance), { bold: true }),
-        cell("—"),
-        new TableCell({ columnSpan: 2, borders: cellBorders, children: [new Paragraph({ children: [new TextRun({ text: "avans qaytariladimi?", italics: true, size: 16 })] })] }),
+        new TableCell({
+          columnSpan: 4,
+          borders: dataCellBorders,
+          shading: { type: ShadingType.CLEAR, fill: COLORS.redBg },
+          margins: { top: 120, bottom: 120, left: 100, right: 100 },
+          children: [new Paragraph({ children: [new TextRun({ text: `Otkaz: ${rejected.length} ta`, bold: true, color: COLORS.red })] })],
+        }),
+        textCell(fmtMoney(rejectedTotal), { align: AlignmentType.RIGHT, bold: true, shadeFill: COLORS.redBg }),
+        textCell(fmtMoney(rejectedAdvance), { align: AlignmentType.RIGHT, bold: true, shadeFill: COLORS.redBg }),
+        textCell("—", { align: AlignmentType.RIGHT, shadeFill: COLORS.redBg }),
+        new TableCell({
+          columnSpan: 2,
+          borders: dataCellBorders,
+          shading: { type: ShadingType.CLEAR, fill: COLORS.redBg },
+          margins: { top: 120, bottom: 120, left: 100, right: 100 },
+          children: [new Paragraph({ children: [new TextRun({ text: "avans qaytariladimi?", italics: true, size: 16, color: COLORS.gray })] })],
+        }),
       ],
     }),
   ];
 
   const table = new Table({
-    width: { size: 100, type: WidthType.PERCENTAGE },
+    width: { size: TOTAL_WIDTH, type: WidthType.DXA },
+    columnWidths: COLUMN_WIDTHS,
     rows: [headerRow, ...dataRows, ...summaryRows],
   });
 
   const dateLabel = dayStart.toLocaleDateString("uz-UZ", { day: "2-digit", month: "2-digit", year: "numeric" });
   const timeLabel = uzbekistanTime.toLocaleTimeString("uz-UZ", { hour: "2-digit", minute: "2-digit" });
 
+  const summaryPillsTable = new Table({
+    width: { size: TOTAL_WIDTH, type: WidthType.DXA },
+    borders: { ...NO_BORDERS, insideHorizontal: NONE, insideVertical: NONE },
+    rows: [
+      new TableRow({
+        children: [
+          pill(`✓ Yetkazildi ${delivered.length} ta · ${fmtMoney(deliveredTotal)} so'm`, COLORS.greenBg, COLORS.green),
+          spacer(),
+          pill(`✕ Otkaz ${rejected.length} ta · ${fmtMoney(rejectedTotal)} so'm`, COLORS.redBg, COLORS.red),
+          spacer(),
+          pill(`Otkaz ulushi ${rejectionRate}%`, COLORS.grayBg, COLORS.gray),
+        ],
+      }),
+    ],
+  });
+
   const doc = new Document({
+    styles: { default: { document: { run: { font: "Calibri" } } } },
     sections: [
       {
+        properties: {
+          page: {
+            size: { orientation: PageOrientation.LANDSCAPE },
+            margin: { top: PAGE_MARGIN, bottom: PAGE_MARGIN, left: PAGE_MARGIN, right: PAGE_MARGIN },
+          },
+        },
         children: [
           new Paragraph({
-            children: [new TextRun({ text: "Bugun tugatilgan zakazlar", bold: true, size: 32 })],
+            spacing: { after: 40 },
+            children: [new TextRun({ text: "Bugun tugatilgan zakazlar", bold: true, size: 34, color: COLORS.ink })],
           }),
           new Paragraph({
-            spacing: { after: 100 },
-            children: [new TextRun({ text: `${dateLabel} · ${timeLabel} holatiga`, size: 20, color: "666666" })],
+            spacing: { after: 220 },
+            children: [new TextRun({ text: `${dateLabel} · ${timeLabel} holatiga`, size: 19, color: COLORS.gray })],
           }),
-          new Paragraph({
-            spacing: { after: 200 },
-            children: [
-              new TextRun({ text: `Yetkazildi ${delivered.length} ta · ${fmtMoney(deliveredTotal)} so'm`, bold: true, color: "1E7E34" }),
-              new TextRun({ text: "    " }),
-              new TextRun({ text: `Otkaz ${rejected.length} ta · ${fmtMoney(rejectedTotal)} so'm`, bold: true, color: "C0392B" }),
-              new TextRun({ text: "    " }),
-              new TextRun({ text: `Otkaz ulushi ${rejectionRate}%`, bold: true }),
-            ],
-          }),
+          summaryPillsTable,
+          new Paragraph({ spacing: { after: 200 }, children: [] }),
           rows.length > 0
             ? table
-            : new Paragraph({ children: [new TextRun({ text: "Bugun yakunlangan (yetkazilgan yoki otkaz qilingan) buyurtma yo'q.", italics: true })] }),
+            : new Paragraph({ children: [new TextRun({ text: "Bugun yakunlangan (yetkazilgan yoki otkaz qilingan) buyurtma yo'q.", italics: true, color: COLORS.gray })] }),
         ],
       },
     ],
