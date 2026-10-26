@@ -38,11 +38,13 @@ const COLORS = {
 const fmtMoney = (n: number) => Math.round(n).toLocaleString("uz-UZ").replace(/,/g, " ");
 const fmtHours = (from: Date, to: Date) => Math.max(0, Math.round((to.getTime() - from.getTime()) / 3_600_000));
 
-// Landscape Letter (15840 x 12240 twips) with 0.5" margins — leaves exactly
-// enough room for 9 columns without Word squeezing names/addresses onto
-// multiple wrapped lines the way the portrait default did.
-const PAGE_MARGIN = 720;
-const COLUMN_WIDTHS = [500, 1900, 1600, 2300, 1500, 1500, 1500, 1000, 2600];
+// Portrait, not landscape: Telegram's in-app docx viewer fits the whole page
+// to the phone's (portrait) screen width, so a landscape page — wider than
+// it is tall — renders noticeably smaller and needs pinch-zooming to read.
+// Portrait Letter (12240 x 15840 twips) with tight margins and narrow
+// columns keeps the 9-column table legible without that zoomed-out look.
+const PAGE_MARGIN = 450;
+const COLUMN_WIDTHS = [400, 1500, 1300, 1700, 1180, 1180, 1180, 800, 2100];
 const TOTAL_WIDTH = COLUMN_WIDTHS.reduce((a, b) => a + b, 0);
 
 const NONE = { style: BorderStyle.NONE, size: 0, color: "FFFFFF" };
@@ -281,7 +283,7 @@ export async function generateDeliveryReportDocx(forDate: Date = new Date()): Pr
       {
         properties: {
           page: {
-            size: { orientation: PageOrientation.LANDSCAPE },
+            size: { orientation: PageOrientation.PORTRAIT },
             margin: { top: PAGE_MARGIN, bottom: PAGE_MARGIN, left: PAGE_MARGIN, right: PAGE_MARGIN },
           },
         },
