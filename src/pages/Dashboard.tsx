@@ -5,7 +5,6 @@ import DashboardLayout from "@/components/DashboardLayout";
 import DashboardStatCard from "@/components/dashboard/DashboardStatCard";
 import DashboardPeriodControl, { DashboardPeriod, PERIOD_LABELS } from "@/components/dashboard/DashboardPeriodControl";
 import DonutCard, { DonutSlice } from "@/components/dashboard/DonutCard";
-import RecentActivityCard, { ActivityItem } from "@/components/dashboard/RecentActivityCard";
 import SellerPerformanceTable, { SellerPerformanceRow } from "@/components/dashboard/SellerPerformanceTable";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import {
@@ -13,10 +12,6 @@ import {
   DollarSign,
   TrendingUp,
   Users,
-  UserPlus,
-  PackagePlus,
-  RefreshCw,
-  CheckCircle2,
   PieChart as PieChartIcon,
   Globe2,
   Warehouse,
@@ -134,6 +129,7 @@ const Dashboard = () => {
   const [profiles, setProfiles] = useState<any[]>([]);
   const [products, setProducts] = useState<any[]>([]);
   const [tasks, setTasks] = useState<any[]>([]);
+  const [stages, setStages] = useState<any[]>([]);
 
   useEffect(() => {
     if (user) fetchDashboardData();
@@ -145,9 +141,10 @@ const Dashboard = () => {
       if (!user) return;
       setLoading(true);
 
-      const [allOrders, allLeads] = await Promise.all([api.orders.list(), api.leads.list()]);
+      const [allOrders, allLeads, allStages] = await Promise.all([api.orders.list(), api.leads.list(), api.stages.list()]);
       setOrders(allOrders);
       setLeads(allLeads);
+      setStages(allStages);
 
       if (isAdminOrRop) {
         const [allProfiles, allProducts, allTasks] = await Promise.all([
@@ -201,18 +198,26 @@ const Dashboard = () => {
   const pendingOrders = currentOrders.filter((o) => o.status === "pending").length;
   const employees = useMemo(() => profiles.filter((p) => p.role === "seller"), [profiles]);
 
+  // "Sifatsiz" is a lead stage admins mark bad/spam leads with; everything
+  // else counts as a quality lead — there's no separate "sifatli" stage.
+  const sifatsizStageId = useMemo(() => stages.find((s) => s.name === "Sifatsiz")?.id, [stages]);
+
   const last7 = useMemo(() => {
     return Array.from({ length: 7 }, (_, i) => {
       const date = subDays(new Date(), 6 - i);
       const dateStr = format(date, "yyyy-MM-dd");
       const dayOrders = ownOrders.filter((o) => o.order_date === dateStr);
+      const dayLeads = ownLeads.filter((l) => l.created_at && format(parseISO(l.created_at), "yyyy-MM-dd") === dateStr);
+      const sifatsizLeads = dayLeads.filter((l) => l.stage === sifatsizStageId).length;
       return {
         name: format(date, "dd MMM"),
         revenue: dayOrders.reduce((sum, o) => sum + Number(o.total_amount), 0),
         orders: dayOrders.length,
+        sifatliLeads: dayLeads.length - sifatsizLeads,
+        sifatsizLeads,
       };
     });
-  }, [ownOrders]);
+  }, [ownOrders, ownLeads, sifatsizStageId]);
 
   const dateRangeLabel =
     format(periodStart, "yyyy-MM-dd") === format(periodEnd, "yyyy-MM-dd")
@@ -267,73 +272,6 @@ const Dashboard = () => {
     ],
     [products],
   );
-
-  const recentActivity: ActivityItem[] = useMemo(() => {
-    if (!isAdminOrRop) return [];
-    const nameById = new Map(profiles.map((p) => [p.id, p.full_name]));
-    const items: ActivityItem[] = [];
-
-    for (const lead of leads) {
-      if (!lead.created_at) continue;
-      items.push({
-        id: `lead-${lead.id}`,
-        icon: UserPlus,
-        iconClassName: "bg-blue-500/10 text-blue-600",
-        title: "Yangi mijoz qo'shildi",
-        subtitle: `${nameById.get(lead.seller_id) ?? "Sotuvchi"} tomonidan`,
-        date: parseISO(lead.created_at),
-      });
-    }
-
-    for (const order of orders) {
-      if (order.created_at) {
-        items.push({
-          id: `order-${order.id}`,
-          icon: ShoppingCart,
-          iconClassName: "bg-sky-500/10 text-sky-600",
-          title: "Yangi zakaz yaratildi",
-          subtitle: `${nameById.get(order.seller_id) ?? "Sotuvchi"} tomonidan`,
-          date: parseISO(order.created_at),
-        });
-      }
-      if (order.updated_at && order.created_at && order.updated_at !== order.created_at && order.status !== "pending") {
-        items.push({
-          id: `order-status-${order.id}`,
-          icon: RefreshCw,
-          iconClassName: "bg-orange-500/10 text-orange-600",
-          title: "Zakaz holati yangilandi",
-          subtitle: `#ZK-${String(order.order_number).padStart(3, "0")}`,
-          date: parseISO(order.updated_at),
-        });
-      }
-    }
-
-    for (const product of products) {
-      if (!product.created_at) continue;
-      items.push({
-        id: `product-${product.id}`,
-        icon: PackagePlus,
-        iconClassName: "bg-violet-500/10 text-violet-600",
-        title: "Mahsulot qo'shildi",
-        subtitle: "Ombor tizimiga",
-        date: parseISO(product.created_at),
-      });
-    }
-
-    for (const task of tasks) {
-      if (task.status !== "completed" || !task.updated_at) continue;
-      items.push({
-        id: `task-${task.id}`,
-        icon: CheckCircle2,
-        iconClassName: "bg-emerald-500/10 text-emerald-600",
-        title: "Vazifa yakunlandi",
-        subtitle: `${nameById.get(task.seller_id) ?? "Sotuvchi"} tomonidan`,
-        date: parseISO(task.updated_at),
-      });
-    }
-
-    return items.sort((a, b) => b.date.getTime() - a.date.getTime()).slice(0, 6);
-  }, [isAdminOrRop, leads, orders, products, tasks, profiles]);
 
   if (loading) {
     return (
@@ -446,10 +384,10 @@ const Dashboard = () => {
             </CardContent>
           </Card>
 
-          <Card className="xl:col-span-3">
+          <Card className="xl:col-span-6">
             <CardHeader>
-              <CardTitle>Zakazlar tendensiyasi</CardTitle>
-              <p className="text-sm text-muted-foreground">So'nggi 7 kun</p>
+              <CardTitle>Lidlar sifati</CardTitle>
+              <p className="text-sm text-muted-foreground">So'nggi 7 kun — sifatli va sifatsiz lidlar</p>
             </CardHeader>
             <CardContent>
               <div className="h-[280px]">
@@ -458,19 +396,15 @@ const Dashboard = () => {
                     <CartesianGrid strokeDasharray="3 3" vertical={false} />
                     <XAxis dataKey="name" tick={{ fontSize: 12 }} />
                     <YAxis allowDecimals={false} tick={{ fontSize: 12 }} />
-                    <Tooltip formatter={(value: number) => [`${value} ta`, "Zakazlar"]} />
-                    <Line type="monotone" dataKey="orders" stroke="hsl(var(--primary))" strokeWidth={2} name="Zakazlar" dot={{ r: 3 }} />
+                    <Tooltip formatter={(value: number, key: string) => [`${value} ta`, key === "sifatliLeads" ? "Sifatli lidlar" : "Sifatsiz lidlar"]} />
+                    <Legend formatter={(v) => (v === "sifatliLeads" ? "Sifatli lidlar" : "Sifatsiz lidlar")} />
+                    <Line type="monotone" dataKey="sifatliLeads" stroke="#22c55e" strokeWidth={2} name="sifatliLeads" dot={{ r: 3 }} />
+                    <Line type="monotone" dataKey="sifatsizLeads" stroke="#ef4444" strokeWidth={2} name="sifatsizLeads" dot={{ r: 3 }} />
                   </LineChart>
                 </ResponsiveContainer>
               </div>
             </CardContent>
           </Card>
-
-          {isAdminOrRop && (
-            <div className="xl:col-span-3">
-              <RecentActivityCard items={recentActivity} />
-            </div>
-          )}
         </div>
 
         {isAdminOrRop && <SellerPerformanceTable rows={sellerRows} />}
