@@ -44,9 +44,9 @@ const fmtHours = (from: Date, to: Date) => Math.max(0, Math.round((to.getTime() 
 // Portrait Letter (12240 x 15840 twips) with tight margins and narrow
 // columns keeps the 9-column table legible without that zoomed-out look.
 const PAGE_MARGIN = 450;
-// +20% over the original fit — the page itself is sized to match (below),
-// since this is a digital-only report, not something printed on paper.
-const COLUMN_WIDTHS = [480, 1800, 1560, 2040, 1416, 1416, 1416, 960, 2520];
+// +20% over the original fit, then -7% — the page itself is sized to match
+// (below), since this is a digital-only report, not something printed on paper.
+const COLUMN_WIDTHS = [446, 1674, 1451, 1897, 1317, 1317, 1317, 893, 2344];
 const TOTAL_WIDTH = COLUMN_WIDTHS.reduce((a, b) => a + b, 0);
 
 const NONE = { style: BorderStyle.NONE, size: 0, color: "FFFFFF" };
