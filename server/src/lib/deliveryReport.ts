@@ -277,13 +277,23 @@ export async function generateDeliveryReportDocx(forDate: Date = new Date()): Pr
     ],
   });
 
+  // Telegram's in-app docx preview renders the page fit-to-width and shows
+  // the whole page — including every inch of trailing blank space below the
+  // content. A fixed full Letter height (11in) made this short report look
+  // tiny, stranded at the top of an otherwise-empty page. Sizing the page to
+  // roughly match the actual content keeps it filling the screen instead.
+  const PAGE_HEIGHT_MIN = 4200;
+  const PAGE_HEIGHT_MAX = 15840; // standard Letter height — content beyond this just paginates normally
+  const estimatedContentHeight = 2600 + 350 + 500 * 2 + 480 * rows.length + PAGE_MARGIN * 2;
+  const pageHeight = Math.min(PAGE_HEIGHT_MAX, Math.max(PAGE_HEIGHT_MIN, estimatedContentHeight));
+
   const doc = new Document({
     styles: { default: { document: { run: { font: "Calibri" } } } },
     sections: [
       {
         properties: {
           page: {
-            size: { orientation: PageOrientation.PORTRAIT },
+            size: { width: TOTAL_WIDTH + PAGE_MARGIN * 2, height: pageHeight, orientation: PageOrientation.PORTRAIT },
             margin: { top: PAGE_MARGIN, bottom: PAGE_MARGIN, left: PAGE_MARGIN, right: PAGE_MARGIN },
           },
         },
