@@ -33,6 +33,13 @@ jobs:
           rsync -az --delete -e "ssh -i ~/.ssh/deploy_key" \
             dist/ "${{ secrets.DEPLOY_USER }}@${{ secrets.DEPLOY_HOST }}:/opt/daraja-erp/frontend/"
 
+      - name: Serve frontend
+        run: |
+          ssh -i ~/.ssh/deploy_key "${{ secrets.DEPLOY_USER }}@${{ secrets.DEPLOY_HOST }}" '
+            pm2 describe daraja-erp-web > /dev/null 2>&1 || pm2 serve /opt/daraja-erp/frontend 8081 --name daraja-erp-web --spa
+            pm2 save
+          '
+
       - name: Sync backend source
         run: |
           rsync -az --delete \
