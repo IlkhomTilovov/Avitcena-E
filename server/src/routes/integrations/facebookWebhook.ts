@@ -167,6 +167,22 @@ function pickFields(fieldData: FieldDatum[]) {
     }
   }
 
+  // Last resort: a custom phone question whose answer doesn't pass the shape
+  // check above (odd formatting, or test-lead placeholder text) but whose
+  // field name clearly asks for a phone number — e.g. "номер_телефона",
+  // "telefon_raqam". Any non-empty answer here beats saving no phone at all.
+  if (!phone) {
+    const phoneHints = ["telefon", "phone", "телефон", "raqam"];
+    const candidate = fieldData.find((f) => {
+      const key = f.name?.toLowerCase() || "";
+      return !known.has(key) && !usedAsName.has(key) && phoneHints.some((hint) => key.includes(hint)) && f.values?.[0]?.trim();
+    });
+    if (candidate) {
+      phone = candidate.values![0].trim();
+      usedAsPhone.add(candidate.name!.toLowerCase());
+    }
+  }
+
   const formAnswers = fieldData
     .filter((f) => !known.has(f.name?.toLowerCase()) && !usedAsName.has(f.name?.toLowerCase()) && !usedAsPhone.has(f.name?.toLowerCase()))
     .map((f) => ({
