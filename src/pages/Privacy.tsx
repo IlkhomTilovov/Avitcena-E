@@ -1,4 +1,4 @@
-const UPDATED_AT = "13.10.2026";
+const UPDATED_AT = "11.11.2026";
 const CONTACT_EMAIL = "ilkhomtilovov@gmail.com";
 
 const Section = ({ title, children }: { title: string; children: React.ReactNode }) => (
@@ -17,12 +17,12 @@ const Privacy = () => (
     <article className="mx-auto max-w-3xl space-y-10 rounded-2xl bg-white p-8 shadow-sm sm:p-12">
       <header className="space-y-2 border-b border-slate-200 pb-6">
         <h1 className="text-3xl font-bold text-slate-900">Maxfiylik siyosati</h1>
-        <p className="text-sm text-slate-500">Daraja ERP (ROP Seller) · Oxirgi yangilanish: {UPDATED_AT}</p>
+        <p className="text-sm text-slate-500">Avitcena CRM · Oxirgi yangilanish: {UPDATED_AT}</p>
       </header>
 
       <Section title="1. Umumiy ma'lumot">
         <p>
-          Daraja ERP - bu Daraja Book kompaniyasining ichki savdo boshqaruv tizimi (CRM). Tizim mijozlar bilan
+          Avitcena CRM - bu Avitcena kompaniyasining ichki savdo boshqaruv tizimi. Tizim mijozlar bilan
           ishlash, lidlarni kuzatish va buyurtmalarni boshqarish uchun ishlatiladi. Ushbu siyosat tizim qanday
           ma'lumotlarni to'plashini va ularni qanday himoya qilishini tushuntiradi.
         </p>
