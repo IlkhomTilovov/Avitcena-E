@@ -93,6 +93,22 @@ export const leads = pgTable("leads", {
   notes: text("notes"),
   facebookLeadId: text("facebook_lead_id").unique(),
   facebookFormAnswers: jsonb("facebook_form_answers"),
+  // Ad attribution, read off the leadgen object alongside field_data (see
+  // routes/integrations/facebookWebhook.ts). Null for leads that didn't come
+  // from a Meta Lead Ad (manually created, Telegram, etc.) or whose ad was
+  // deleted/inaccessible by the time the lead was fetched.
+  adId: text("ad_id"),
+  adName: text("ad_name"),
+  adsetId: text("adset_id"),
+  adsetName: text("adset_name"),
+  campaignId: text("campaign_id"),
+  campaignName: text("campaign_name"),
+  formId: text("form_id"),
+  platform: text("platform"), // 'fb' | 'ig', raw from Meta — see `source` for the display label
+  isOrganic: boolean("is_organic").notNull().default(false),
+  // Meta's Lead Ads Testing Tool leads (dummy placeholder field values) —
+  // kept in the CRM like any other lead but excluded from ad reporting.
+  isTest: boolean("is_test").notNull().default(false),
   // Dedup key for a Telegram-captured lead: "<chat_id>:<message_id>" of the
   // group message it was parsed from — mirrors facebookLeadId's role.
   telegramLeadId: text("telegram_lead_id").unique(),

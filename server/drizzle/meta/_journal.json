@@ -15,6 +15,13 @@
       "when": 1793013555314,
       "tag": "0001_rare_spyke",
       "breakpoints": true
+    },
+    {
+      "idx": 2,
+      "version": "7",
+      "when": 1794402656206,
+      "tag": "0002_busy_harry_osborn",
+      "breakpoints": true
     }
   ]
 }

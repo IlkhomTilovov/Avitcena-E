@@ -62,34 +62,64 @@ function verifySignature(req: { headers: Record<string, unknown>; rawBody?: Buff
 
 type FieldDatum = { name: string; values?: string[] };
 
+const sleep = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
+
 /**
  * MUHIM: Meta webhook'i lid ma'lumotlarini (ism, telefon) YUBORMAYDI.
  * U faqat leadgen_id yuboradi — qolganini Graph API'dan o'qib olish kerak.
+ *
+ * Meta tomondagi vaqtinchalik xatolar (429, 5xx, tarmoq) uchun eksponensial
+ * kutish bilan 3 martagacha qayta urinadi, shunda bitta o'tkinchi muammo lidni
+ * atributsiyasiz (yoki umuman) saqlanib qolishiga olib kelmaydi.
  */
 async function fetchLeadDetails(leadgenId: string, pageToken: string) {
   const url =
     `https://graph.facebook.com/${GRAPH_VERSION}/${encodeURIComponent(leadgenId)}` +
-    `?fields=id,created_time,field_data,form_id,ad_id,campaign_id,platform` +
+    `?fields=id,created_time,field_data,form_id,ad_id,ad_name,adset_id,adset_name,campaign_id,campaign_name,platform,is_organic` +
     `&access_token=${encodeURIComponent(pageToken)}`;
 
-  const res = await fetch(url);
-  const json = (await res.json()) as {
+  type LeadDetails = {
     error?: { message?: string };
     field_data?: FieldDatum[];
     created_time?: string;
     form_id?: string;
     ad_id?: string;
+    ad_name?: string;
+    adset_id?: string;
+    adset_name?: string;
     campaign_id?: string;
+    campaign_name?: string;
     platform?: string;
+    is_organic?: boolean;
   };
 
-  if (!res.ok || json.error) {
-    throw new Error(json.error?.message || `Graph API ${res.status}`);
+  const maxAttempts = 3;
+  let lastErr: Error | undefined;
+  for (let attempt = 1; attempt <= maxAttempts; attempt++) {
+    try {
+      const res = await fetch(url);
+      const json = (await res.json()) as LeadDetails;
+      if (!res.ok || json.error) {
+        throw new Error(json.error?.message || `Graph API ${res.status}`);
+      }
+      return json;
+    } catch (err) {
+      lastErr = err as Error;
+      if (attempt < maxAttempts) {
+        await sleep(2 ** attempt * 500); // 1s, 2s
+      }
+    }
   }
-  return json;
+  throw lastErr;
 }
 
 const normalizePhone = (raw?: string | null) => (raw ? raw.replace(/\D/g, "") || null : null);
+
+// Meta's Lead Ads Testing Tool fills every answer with a literal
+// "<test lead: dummy data for ...>" placeholder — the one reliable signal
+// that a leadgen event is a test, not a real customer submission.
+const isTestLeadData = (fieldData: FieldDatum[]) =>
+  fieldData.some((f) => f.values?.some((v) => v.toLowerCase().startsWith("<test lead")));
 
 /**
  * Maxsus savollar uchun Meta ko'pincha savol matnini (va ba'zan tanlangan
@@ -260,6 +290,15 @@ async function handleLeadgen(value: { leadgen_id: string; page_id?: string; form
   // formAnswers'ga (key/value) tushadi va Facebook Ads kartochkasida ko'rsatiladi.
   const noteLines: string[] = [];
   let formAnswers: { question: string; answer: string }[] = [];
+  let adId: string | null = value.ad_id ?? null;
+  let adName: string | null = null;
+  let adsetId: string | null = null;
+  let adsetName: string | null = null;
+  let campaignId: string | null = null;
+  let campaignName: string | null = null;
+  let platform: string | null = null;
+  let isOrganic = false;
+  let isTest = false;
 
   if (!pageToken) {
     noteLines.push("⚠️ Page access token sozlanmagan — ism/telefon olinmadi");
@@ -273,6 +312,15 @@ async function handleLeadgen(value: { leadgen_id: string; page_id?: string; form
       email = picked.email;
       formAnswers = picked.formAnswers;
       if (/instagram|^ig$/i.test(details.platform || "")) source = "Instagram";
+      adId = details.ad_id ?? adId;
+      adName = details.ad_name ?? null;
+      adsetId = details.adset_id ?? null;
+      adsetName = details.adset_name ?? null;
+      campaignId = details.campaign_id ?? null;
+      campaignName = details.campaign_name ?? null;
+      platform = details.platform ?? null;
+      isOrganic = details.is_organic ?? !details.ad_id;
+      isTest = isTestLeadData(details.field_data || []);
     } catch (err) {
       noteLines.push(`⚠️ Graph API xatosi: ${(err as Error).message}`);
       console.error("[facebook] lid ma'lumotini olishda xato:", err);
@@ -292,6 +340,16 @@ async function handleLeadgen(value: { leadgen_id: string; page_id?: string; form
     facebookFormAnswers: formAnswers.length ? formAnswers : null,
     notes: noteLines.length ? noteLines.join("\n") : null,
     status: "new",
+    adId,
+    adName,
+    adsetId,
+    adsetName,
+    campaignId,
+    campaignName,
+    formId: value.form_id ?? null,
+    platform,
+    isOrganic,
+    isTest,
     ...(stageId ? { stage: stageId } : {}),
   });
 

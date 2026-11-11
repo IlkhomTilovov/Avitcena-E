@@ -584,7 +584,9 @@ const LeadDetailsDialog = ({ lead, open, onOpenChange, onUpdate, sellers, stages
                 <SourceIcon className="h-4 w-4 shrink-0 text-muted-foreground" />
                 <div className="flex-1">
                   <p className="text-xs text-muted-foreground">Manba</p>
-                  <p className="font-medium">{lead.source}</p>
+                  <p className="font-medium">
+                    {[lead.source, lead.campaign_name, lead.ad_name].filter(Boolean).join(" · ")}
+                  </p>
                 </div>
                 <ChevronRight className="h-4 w-4 text-muted-foreground" />
               </div>
