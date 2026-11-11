@@ -64,29 +64,11 @@ export const api = {
     get: (id: string) => get<any>(`/profiles/${id}`),
     update: (id: string, data: any) => patch<any>(`/profiles/${id}`, data),
   },
-  products: {
-    list: () => get<any[]>("/products"),
-    create: (data: any) => post<any>("/products", data),
-    update: (id: string, data: any) => patch<any>(`/products/${id}`, data),
-    remove: (id: string) => del<void>(`/products/${id}`),
-  },
   stages: {
     list: () => get<any[]>("/stages"),
     create: (data: any) => post<any>("/stages", data),
     update: (id: string, data: any) => patch<any>(`/stages/${id}`, data),
     remove: (id: string) => del<void>(`/stages/${id}`),
-  },
-  deliveryStatuses: {
-    list: () => get<any[]>("/delivery-statuses"),
-    create: (data: any) => post<any>("/delivery-statuses", data),
-    update: (id: string, data: any) => patch<any>(`/delivery-statuses/${id}`, data),
-    remove: (id: string) => del<void>(`/delivery-statuses/${id}`),
-  },
-  couriers: {
-    list: () => get<any[]>("/couriers"),
-    create: (data: any) => post<any>("/couriers", data),
-    update: (id: string, data: any) => patch<any>(`/couriers/${id}`, data),
-    remove: (id: string) => del<void>(`/couriers/${id}`),
   },
   leads: {
     list: () => get<any[]>("/leads"),
@@ -142,27 +124,6 @@ export const api = {
     update: (id: string, data: Partial<{ target_value: number; weight: number; period: string; is_active: boolean }>) =>
       patch<any>(`/kpi-targets/${id}`, data),
     remove: (id: string) => del<void>(`/kpi-targets/${id}`),
-  },
-  deliveries: {
-    list: () => get<any[]>("/deliveries"),
-    history: (id: string) => get<any[]>(`/deliveries/${id}/history`),
-    updateByOrder: (
-      orderId: string,
-      data: Partial<{
-        // A built-in DeliveryStatus or a custom delivery_statuses row's id.
-        status: string;
-        courier_name: string | null;
-        courier_phone: string | null;
-        delivery_fee: number | null;
-        delivery_date: string | null;
-        rejection_reason: string | null;
-        rejection_note: string | null;
-        followup_reason: string | null;
-        followup_note: string | null;
-        followup_date: string | null;
-        notes: string | null;
-      }>,
-    ) => patch<any>(`/deliveries/order/${orderId}`, data),
   },
   uploads: {
     upload: async (file: File): Promise<{ url: string }> => {

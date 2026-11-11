@@ -147,7 +147,6 @@ const AllOrders = () => {
     notes: '',
     items: [{ product_name: '', quantity: 1 }] as Array<{ product_name: string; quantity: number }>
   });
-  const [products, setProducts] = useState<any[]>([]);
   const [availableDistricts, setAvailableDistricts] = useState<string[]>([]);
   const { isAdmin, isRop, loading: rolesLoading } = useUserRoles();
   const { isSotuvchi } = useUserRole();
@@ -162,7 +161,6 @@ const AllOrders = () => {
   useEffect(() => {
     if (!rolesLoading && user) {
       fetchOrders();
-      fetchProducts();
       fetchSellers();
     }
   }, [rolesLoading, isAdmin, isRop, user]);
@@ -200,9 +198,8 @@ const AllOrders = () => {
     try {
       if (!user) return;
 
-      const [ordersData, profiles, deliveriesData] = await Promise.all([api.orders.list(), api.profiles.list(), api.deliveries.list()]);
+      const [ordersData, profiles] = await Promise.all([api.orders.list(), api.profiles.list()]);
       const profileById = new Map(profiles.map((p: any) => [p.id, p]));
-      const deliveryByOrderId = new Map(deliveriesData.map((d: any) => [d.order_id, d]));
 
       // If not admin or rop, the backend already scopes the list to the caller's own orders.
       const ordersWithItems = ordersData.map((order: any) => {
@@ -212,7 +209,7 @@ const AllOrders = () => {
           items: order.order_items || [],
           seller_name: sellerProfile?.full_name || "Noma'lum",
           seller_phone: sellerProfile?.phone || "",
-          delivery_status: deriveDeliveryStatus(order.status, deliveryByOrderId.get(order.id)),
+          delivery_status: deriveDeliveryStatus(order.status),
         };
       });
 
@@ -221,15 +218,6 @@ const AllOrders = () => {
       toast.error("Xatolik: " + (error instanceof ApiError ? error.message : ""));
     } finally {
       setLoading(false);
-    }
-  };
-
-  const fetchProducts = async () => {
-    try {
-      const data = await api.products.list();
-      setProducts(data.sort((a: any, b: any) => a.name.localeCompare(b.name)));
-    } catch (error) {
-      toast.error("Mahsulotlarni yuklashda xatolik: " + (error instanceof ApiError ? error.message : ""));
     }
   };
 
@@ -373,28 +361,6 @@ const AllOrders = () => {
     const fileName = `Zakazlar_${format(new Date(), "yyyy-MM-dd_HH-mm")}.xlsx`;
     XLSX.writeFile(wb, fileName);
     toast.success("Zakazlar muvaffaqiyatli yuklandi!");
-  };
-
-  const addProductToOrder = (product: any) => {
-    const existingIndex = createFormData.items.findIndex(item => item.product_name === product.name);
-    
-    if (existingIndex >= 0) {
-      const newItems = [...createFormData.items];
-      newItems[existingIndex].quantity += 1;
-      setCreateFormData({
-        ...createFormData,
-        items: newItems
-      });
-    } else {
-      const newItems = [...createFormData.items.filter(item => item.product_name !== ''), {
-        product_name: product.name,
-        quantity: 1
-      }];
-      setCreateFormData({
-        ...createFormData,
-        items: newItems
-      });
-    }
   };
 
   const removeOrderItem = (index: number) => {
@@ -580,23 +546,6 @@ const AllOrders = () => {
     const newItems = [...editFormData.items];
     newItems[index] = { ...newItems[index], [field]: value };
     setEditFormData({ ...editFormData, items: newItems });
-  };
-
-  const addProductToEditOrder = (product: any) => {
-    const existingIndex = editFormData.items.findIndex(item => item.product_name === product.name);
-    
-    if (existingIndex >= 0) {
-      const newItems = [...editFormData.items];
-      newItems[existingIndex].quantity += 1;
-      setEditFormData({ ...editFormData, items: newItems });
-    } else {
-      const newItems = [...editFormData.items.filter(item => item.product_name !== ''), {
-        product_name: product.name,
-        quantity: 1,
-        price: 0
-      }];
-      setEditFormData({ ...editFormData, items: newItems });
-    }
   };
 
   const handleDeleteOrder = async (orderId: string) => {
@@ -1294,20 +1243,6 @@ const AllOrders = () => {
                 {/* Products */}
                 <div className="space-y-2">
                   <Label>Mahsulotlar</Label>
-                  <div className="flex flex-wrap gap-2 mb-2">
-                    {products.map((product) => (
-                      <Button
-                        key={product.id}
-                        type="button"
-                        variant="outline"
-                        size="sm"
-                        onClick={() => addProductToEditOrder(product)}
-                      >
-                        <Plus className="h-3 w-3 mr-1" />
-                        {product.name}
-                      </Button>
-                    ))}
-                  </div>
                   {editFormData.items.map((item, index) => (
                     <div key={index} className="flex gap-2 items-center">
                       <Input
@@ -1502,30 +1437,13 @@ const AllOrders = () => {
 
             <div className="space-y-4 border-t pt-4">
               <div>
-                <Label>Mahsulotlarni tanlang *</Label>
-                <p className="text-xs text-muted-foreground mb-2">Mahsulotni tanlang yoki qo'lda kiriting</p>
-              </div>
-              
-              {/* Product selection grid */}
-              <div className="grid grid-cols-2 gap-3 max-h-[200px] overflow-y-auto p-1 border rounded-md">
-                {products.map((product) => (
-                  <Card 
-                    key={product.id}
-                    className="cursor-pointer hover:border-primary transition-colors overflow-hidden"
-                    onClick={() => addProductToOrder(product)}
-                  >
-                    <CardContent className="p-3">
-                      <h4 className="font-medium text-sm line-clamp-1">{product.name}</h4>
-                    </CardContent>
-                  </Card>
-                ))}
+                <Label>Mahsulotlarni kiriting *</Label>
               </div>
 
-              {/* Selected products */}
-              {createFormData.items.length > 0 && createFormData.items.some(item => item.product_name) && (
+              {createFormData.items.length > 0 && (
                 <div className="space-y-2 border-t pt-4">
                   <Label>Tanlangan mahsulotlar</Label>
-                  {createFormData.items.filter(item => item.product_name).map((item, index) => (
+                  {createFormData.items.map((item, index) => (
                     <div key={index} className="flex gap-2 items-center">
                       <div className="flex-1">
                         <Input

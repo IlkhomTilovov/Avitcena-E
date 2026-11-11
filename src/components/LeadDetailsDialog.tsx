@@ -6,8 +6,6 @@ import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Badge } from "@/components/ui/badge";
-import { Checkbox } from "@/components/ui/checkbox";
-import { Command, CommandEmpty, CommandGroup, CommandInput, CommandItem, CommandList } from "@/components/ui/command";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
 import { api, ApiError } from "@/lib/api";
@@ -29,7 +27,6 @@ import {
   Truck,
   Package,
   X,
-  ChevronsUpDown,
   ChevronRight,
   Pencil,
   Copy,
@@ -81,10 +78,11 @@ const LeadDetailsDialog = ({ lead, open, onOpenChange, onUpdate, sellers, stages
   const [notes, setNotes] = useState(lead?.notes || "");
   const [deliveryStatus, setDeliveryStatus] = useState(lead?.delivery_status || "");
   const [selectedProducts, setSelectedProducts] = useState<string[]>(lead?.product_names || []);
-  const [productPickerOpen, setProductPickerOpen] = useState(false);
-  const [products, setProducts] = useState<any[]>([]);
+  const [newProductTag, setNewProductTag] = useState("");
   const [linkedOrder, setLinkedOrder] = useState<any>(null);
   const [orderItems, setOrderItems] = useState<{ product_name: string; quantity: number; price: number }[]>([]);
+  const [newItemName, setNewItemName] = useState("");
+  const [newItemPrice, setNewItemPrice] = useState("");
   const [editingName, setEditingName] = useState(false);
   const [nameDraft, setNameDraft] = useState(lead?.customer_name || "");
   const [editingPhone, setEditingPhone] = useState(false);
@@ -124,7 +122,6 @@ const LeadDetailsDialog = ({ lead, open, onOpenChange, onUpdate, sellers, stages
       setEditingName(false);
       setPhoneDraft(lead.customer_phone || "");
       setEditingPhone(false);
-      fetchProducts();
 
       // A lead auto-creates its order the moment it enters "Sotildi" (see
       // server/src/routes/leads.ts), so by the time this dialog can show the
@@ -137,15 +134,6 @@ const LeadDetailsDialog = ({ lead, open, onOpenChange, onUpdate, sellers, stages
       }
     }
   }, [open, lead]);
-
-  const fetchProducts = async () => {
-    try {
-      const productsData = await api.products.list();
-      setProducts(productsData);
-    } catch (error) {
-      console.error("Error fetching products:", error);
-    }
-  };
 
   const fetchOrderData = async () => {
     try {
@@ -164,24 +152,35 @@ const LeadDetailsDialog = ({ lead, open, onOpenChange, onUpdate, sellers, stages
     }
   };
 
-  const addProduct = (product: any) => {
-    setOrderItems((prev) => {
-      const existingIndex = prev.findIndex((i) => i.product_name === product.name);
-      if (existingIndex >= 0) {
-        const next = [...prev];
-        next[existingIndex] = { ...next[existingIndex], quantity: next[existingIndex].quantity + 1 };
-        return next;
-      }
-      return [...prev, { product_name: product.name, quantity: 1, price: Number(product.price) || 0 }];
-    });
+  const addOrderItem = () => {
+    const name = newItemName.trim();
+    if (!name) return;
+    setOrderItems((prev) => [...prev, { product_name: name, quantity: 1, price: Number(newItemPrice) || 0 }]);
+    setNewItemName("");
+    setNewItemPrice("");
   };
 
-  const removeProduct = (index: number) => {
+  const removeOrderItem = (index: number) => {
     setOrderItems((prev) => prev.filter((_, i) => i !== index));
   };
 
-  const updateProductQuantity = (index: number, quantity: number) => {
-    setOrderItems((prev) => prev.map((item, i) => (i === index ? { ...item, quantity: Math.max(1, quantity) } : item)));
+  const updateOrderItem = (index: number, field: "product_name" | "quantity" | "price", value: string) => {
+    setOrderItems((prev) =>
+      prev.map((item, i) => {
+        if (i !== index) return item;
+        if (field === "product_name") return { ...item, product_name: value };
+        if (field === "quantity") return { ...item, quantity: Math.max(1, parseInt(value) || 1) };
+        return { ...item, price: Number(value) || 0 };
+      }),
+    );
+  };
+
+  const addProductTag = () => {
+    const name = newProductTag.trim();
+    if (name && !selectedProducts.includes(name)) {
+      setSelectedProducts((prev) => [...prev, name]);
+    }
+    setNewProductTag("");
   };
 
   const handleSaveOrderProducts = async () => {
@@ -744,43 +743,22 @@ const LeadDetailsDialog = ({ lead, open, onOpenChange, onUpdate, sellers, stages
                       <Package className="h-4 w-4" />
                       Mahsulot
                     </Label>
-                    <Popover open={productPickerOpen} onOpenChange={setProductPickerOpen}>
-                      <PopoverTrigger asChild>
-                        <Button
-                          type="button"
-                          variant="outline"
-                          role="combobox"
-                          aria-expanded={productPickerOpen}
-                          className="mt-1 w-full justify-between font-normal"
-                        >
-                          <span className="truncate text-left">
-                            {selectedProducts.length > 0 ? selectedProducts.join(", ") : "Mahsulotlarni tanlang"}
-                          </span>
-                          <ChevronsUpDown className="ml-2 h-4 w-4 shrink-0 opacity-50" />
-                        </Button>
-                      </PopoverTrigger>
-                      <PopoverContent className="w-[--radix-popover-trigger-width] p-0">
-                        <Command>
-                          <CommandInput placeholder="Mahsulot qidirish..." />
-                          <CommandList>
-                            <CommandEmpty>Mahsulot topilmadi</CommandEmpty>
-                            <CommandGroup>
-                              {products.map((product) => (
-                                <CommandItem
-                                  key={product.id}
-                                  value={product.name}
-                                  onSelect={() => toggleProduct(product.name)}
-                                  className="cursor-pointer gap-2"
-                                >
-                                  <Checkbox checked={selectedProducts.includes(product.name)} className="pointer-events-none" />
-                                  {product.name}
-                                </CommandItem>
-                              ))}
-                            </CommandGroup>
-                          </CommandList>
-                        </Command>
-                      </PopoverContent>
-                    </Popover>
+                    <div className="mt-1 flex gap-2">
+                      <Input
+                        placeholder="Mahsulot nomini kiriting"
+                        value={newProductTag}
+                        onChange={(e) => setNewProductTag(e.target.value)}
+                        onKeyDown={(e) => {
+                          if (e.key === "Enter") {
+                            e.preventDefault();
+                            addProductTag();
+                          }
+                        }}
+                      />
+                      <Button type="button" variant="outline" onClick={addProductTag}>
+                        <Plus className="h-4 w-4" />
+                      </Button>
+                    </div>
 
                     {selectedProducts.length > 0 && (
                       <div className="mt-2 flex flex-wrap gap-1.5">
@@ -879,32 +857,52 @@ const LeadDetailsDialog = ({ lead, open, onOpenChange, onUpdate, sellers, stages
                         Sotilgan mahsulotlar
                       </Label>
 
-                      {products.length > 0 && (
-                        <div className="mb-3 flex flex-wrap gap-2">
-                          {products.map((product) => (
-                            <Button key={product.id} type="button" variant="outline" size="sm" onClick={() => addProduct(product)}>
-                              <Plus className="mr-1 h-3 w-3" />
-                              {product.name}
-                            </Button>
-                          ))}
-                        </div>
-                      )}
+                      <div className="mb-3 flex gap-2">
+                        <Input
+                          placeholder="Mahsulot nomi"
+                          value={newItemName}
+                          onChange={(e) => setNewItemName(e.target.value)}
+                          className="flex-1"
+                        />
+                        <Input
+                          type="number"
+                          min={0}
+                          placeholder="Narxi"
+                          value={newItemPrice}
+                          onChange={(e) => setNewItemPrice(e.target.value)}
+                          className="w-28"
+                        />
+                        <Button type="button" size="icon" onClick={addOrderItem}>
+                          <Plus className="h-4 w-4" />
+                        </Button>
+                      </div>
 
                       {orderItems.length === 0 ? (
-                        <p className="text-sm text-muted-foreground">Mahsulot tanlanmagan</p>
+                        <p className="text-sm text-muted-foreground">Mahsulot qo'shilmagan</p>
                       ) : (
                         <div className="space-y-2">
                           {orderItems.map((item, index) => (
                             <div key={index} className="flex items-center gap-2">
-                              <span className="flex-1 truncate text-sm">{item.product_name}</span>
+                              <Input
+                                value={item.product_name}
+                                onChange={(e) => updateOrderItem(index, "product_name", e.target.value)}
+                                className="flex-1"
+                              />
                               <Input
                                 type="number"
                                 min={1}
                                 value={item.quantity}
-                                onChange={(e) => updateProductQuantity(index, parseInt(e.target.value) || 1)}
+                                onChange={(e) => updateOrderItem(index, "quantity", e.target.value)}
                                 className="w-20"
                               />
-                              <Button type="button" variant="ghost" size="icon" onClick={() => removeProduct(index)}>
+                              <Input
+                                type="number"
+                                min={0}
+                                value={item.price}
+                                onChange={(e) => updateOrderItem(index, "price", e.target.value)}
+                                className="w-24"
+                              />
+                              <Button type="button" variant="ghost" size="icon" onClick={() => removeOrderItem(index)}>
                                 <X className="h-4 w-4" />
                               </Button>
                             </div>

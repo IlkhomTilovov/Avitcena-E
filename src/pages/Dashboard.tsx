@@ -14,7 +14,6 @@ import {
   Users,
   PieChart as PieChartIcon,
   Globe2,
-  Warehouse,
 } from "lucide-react";
 import { useNavigate } from "react-router-dom";
 import {
@@ -127,7 +126,6 @@ const Dashboard = () => {
   const [orders, setOrders] = useState<any[]>([]);
   const [leads, setLeads] = useState<any[]>([]);
   const [profiles, setProfiles] = useState<any[]>([]);
-  const [products, setProducts] = useState<any[]>([]);
   const [tasks, setTasks] = useState<any[]>([]);
   const [stages, setStages] = useState<any[]>([]);
 
@@ -147,13 +145,8 @@ const Dashboard = () => {
       setStages(allStages);
 
       if (isAdminOrRop) {
-        const [allProfiles, allProducts, allTasks] = await Promise.all([
-          api.profiles.list(),
-          api.products.list(),
-          api.tasks.list(),
-        ]);
+        const [allProfiles, allTasks] = await Promise.all([api.profiles.list(), api.tasks.list()]);
         setProfiles(allProfiles);
-        setProducts(allProducts);
         setTasks(allTasks);
       }
     } catch (error) {
@@ -276,15 +269,6 @@ const Dashboard = () => {
       .filter((label) => label !== "Boshqa" || (counts.get("Boshqa") ?? 0) > 0)
       .map((label) => ({ label, value: counts.get(label) ?? 0, color: LEAD_SOURCE_COLORS[label] }));
   }, [currentLeads]);
-
-  const stockSlices: DonutSlice[] = useMemo(
-    () => [
-      { label: "Mavjud", value: products.filter((p) => (p.stock || 0) >= 10).length, color: "#22c55e" },
-      { label: "Kam qoldi", value: products.filter((p) => (p.stock || 0) > 0 && (p.stock || 0) < 10).length, color: "#f59e0b" },
-      { label: "Tugagan", value: products.filter((p) => (p.stock || 0) === 0).length, color: "#ef4444" },
-    ],
-    [products],
-  );
 
   if (loading) {
     return (
@@ -423,7 +407,7 @@ const Dashboard = () => {
         {isAdminOrRop && <SellerPerformanceTable rows={sellerRows} />}
 
         {isAdminOrRop && (
-          <div className="grid gap-4 md:grid-cols-3">
+          <div className="grid gap-4 md:grid-cols-2">
             <DonutCard
               title="Zakazlar holati"
               icon={<PieChartIcon className="h-4 w-4 text-muted-foreground" />}
@@ -435,12 +419,6 @@ const Dashboard = () => {
               icon={<Globe2 className="h-4 w-4 text-muted-foreground" />}
               unitLabel="lid"
               slices={leadSourceSlices}
-            />
-            <DonutCard
-              title="Ombor holati"
-              icon={<Warehouse className="h-4 w-4 text-muted-foreground" />}
-              unitLabel="mahsulot"
-              slices={stockSlices}
             />
           </div>
         )}

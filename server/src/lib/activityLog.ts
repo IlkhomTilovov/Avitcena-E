@@ -1,6 +1,6 @@
 import { db, schema } from "../db/index.js";
 
-export type ActivityEntityType = "lead" | "order" | "task" | "user" | "kpi_target" | "delivery";
+export type ActivityEntityType = "lead" | "order" | "task" | "user" | "kpi_target";
 
 interface RecordActivityInput {
   companyId: string | null;

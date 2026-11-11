@@ -77,44 +77,6 @@ export const stages = pgTable("stages", {
   updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
 });
 
-// Every Dastavka Kanban column, both the 5 built-in pipeline statuses and
-// admin-added custom columns, as one list controlling display only: name,
-// color, order, and whether a column is shown at all.
-//
-// A built-in row's `builtInKey` is the literal pipeline key ("ready",
-// "in_transit", "delivered", "needs_followup", "rejected") that
-// deliveries.status actually stores and that server/src/routes/deliveries.ts's
-// business logic (rejection-reason requirement, syncing orders.status, the
-// ALLOWED_TRANSITIONS pipeline rules) is keyed off — that key is never
-// renamed. A custom row has `builtInKey: null`; its own random `id` is what
-// deliveries.status stores for it instead. The frontend treats
-// `builtInKey ?? id` as "the column's status key" uniformly for both kinds.
-// Built-in rows are lazily seeded per company (see deliveryStatuses.ts) and
-// can be renamed/recolored/reordered/hidden like any other column, but never
-// actually deleted — "hidden" is the built-in equivalent of a custom column's
-// delete, since the app can't forget a key its pipeline logic depends on.
-export const deliveryStatuses = pgTable(
-  "delivery_statuses",
-  {
-    id: uuid("id").primaryKey().defaultRandom(),
-    companyId: uuid("company_id").references(() => companies.id, { onDelete: "set null" }),
-    builtInKey: text("built_in_key"),
-    name: text("name").notNull(),
-    displayOrder: integer("display_order").notNull(),
-    color: text("color").notNull().default("bg-blue-500"),
-    hidden: boolean("hidden").notNull().default(false),
-    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
-    updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
-  },
-  (table) => ({
-    // Prevents a race on the first concurrent GETs for a company from lazily
-    // seeding the same built-in column twice; irrelevant to custom rows,
-    // whose builtInKey is NULL and so never collides under standard SQL NULL
-    // uniqueness semantics.
-    builtInKeyUnique: uniqueIndex("delivery_statuses_company_built_in_key_key").on(table.companyId, table.builtInKey),
-  }),
-);
-
 export const leads = pgTable("leads", {
   id: uuid("id").primaryKey().defaultRandom(),
   companyId: uuid("company_id").references(() => companies.id, { onDelete: "set null" }),
@@ -166,19 +128,6 @@ export const leadComments = pgTable("lead_comments", {
     .references(() => users.id, { onDelete: "cascade" }),
   comment: text("comment").notNull(),
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
-});
-
-export const products = pgTable("products", {
-  id: uuid("id").primaryKey().defaultRandom(),
-  companyId: uuid("company_id").references(() => companies.id, { onDelete: "set null" }),
-  name: text("name").notNull(),
-  description: text("description"),
-  price: numeric("price").notNull(),
-  imageUrl: text("image_url"),
-  category: text("category"),
-  stock: integer("stock").default(0),
-  createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
-  updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
 });
 
 export const orders = pgTable("orders", {
@@ -279,53 +228,3 @@ export const activityLog = pgTable("activity_log", {
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
 });
 
-// One row per delivery attempt. A redelivery creates a NEW row (isActive=true)
-// and marks the previous attempt isActive=false, so the full attempt history
-// is preserved instead of being overwritten. At most one isActive=true row per
-// order is enforced in routes/deliveries.ts (application-level, not a DB
-// constraint, since Postgres can't easily express "unique among TRUE rows"
-// without a partial index this project's drizzle-kit push workflow doesn't manage).
-// One delivery row per order, tracking it through the 5-stage Kanban
-// (ready -> in_transit -> delivered / needs_followup / rejected). Courier is
-// A lightweight courier registry: name + phone only, no login/auth/role —
-// couriers aren't app users. Exists purely so admin/rop can manage a reusable
-// list from one place instead of retyping a courier's details on every
-// delivery; deliveries.courierName/courierPhone below stay plain free-text
-// columns (no FK to this table), consistent with the "not a user/role"
-// design this module already had before couriers got their own page.
-export const couriers = pgTable("couriers", {
-  id: uuid("id").primaryKey().defaultRandom(),
-  companyId: uuid("company_id").references(() => companies.id, { onDelete: "set null" }),
-  name: text("name").notNull(),
-  phone: text("phone"),
-  region: text("region"),
-  createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
-  updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
-});
-
-// intentionally a free-text name, not a user/role, per the simplified spec —
-// this module deliberately has no separate KPI system.
-export const deliveries = pgTable("deliveries", {
-  id: uuid("id").primaryKey().defaultRandom(),
-  companyId: uuid("company_id").references(() => companies.id, { onDelete: "set null" }),
-  orderId: uuid("order_id")
-    .notNull()
-    .unique()
-    .references(() => orders.id, { onDelete: "cascade" }),
-  status: text("status").notNull().default("ready"),
-  courierName: text("courier_name"),
-  courierPhone: text("courier_phone"),
-  deliveryFee: numeric("delivery_fee"),
-  deliveryDate: date("delivery_date"),
-  deliveredAt: timestamp("delivered_at", { withTimezone: true }),
-  rejectionReason: text("rejection_reason"),
-  rejectionNote: text("rejection_note"),
-  followupReason: text("followup_reason"),
-  followupNote: text("followup_note"),
-  followupDate: date("followup_date"),
-  notes: text("notes"),
-  statusUpdatedBy: uuid("status_updated_by").references(() => users.id, { onDelete: "set null" }),
-  statusUpdatedAt: timestamp("status_updated_at", { withTimezone: true }),
-  createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
-  updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
-});

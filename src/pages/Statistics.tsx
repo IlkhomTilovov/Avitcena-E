@@ -37,7 +37,6 @@ import {
   Calendar as CalendarIcon,
   PieChart as PieChartIcon,
   BarChart3,
-  Boxes,
   Download,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
@@ -87,7 +86,6 @@ const Statistics = () => {
   const [leads, setLeads] = useState<any[]>([]);
   const [sellers, setSellers] = useState<any[]>([]);
   const [stages, setStages] = useState<any[]>([]);
-  const [products, setProducts] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
 
   const [period, setPeriod] = useState<StatsPeriod>("month");
@@ -113,18 +111,16 @@ const Statistics = () => {
   const fetchAll = async () => {
     try {
       setLoading(true);
-      const [ordersData, leadsData, profilesData, stagesData, productsData] = await Promise.all([
+      const [ordersData, leadsData, profilesData, stagesData] = await Promise.all([
         api.orders.list(),
         api.leads.list(),
         api.profiles.list(),
         api.stages.list(),
-        api.products.list(),
       ]);
       setOrders(ordersData);
       setLeads(leadsData);
       setSellers(profilesData.filter((p: any) => p.role === "seller").sort((a: any, b: any) => a.full_name.localeCompare(b.full_name)));
       setStages(stagesData.sort((a: any, b: any) => a.display_order - b.display_order));
-      setProducts(productsData);
     } catch (error) {
       console.error(error);
       toast.error("Statistikani yuklashda xatolik");
@@ -285,22 +281,6 @@ const Statistics = () => {
       return { id: s.id, name: s.name, color: s.color, count, percent: totalForStages > 0 ? Math.round((count / totalForStages) * 100) : 0 };
     });
   }, [stages, currentLeadsBase]);
-
-  // --- Order type donut (from product category) -------------------------
-  const productCategoryByName = useMemo(() => new Map(products.map((p: any) => [p.name?.toLowerCase(), p.category || "Boshqalar"])), [products]);
-  const orderTypeSlices: DonutSlice[] = useMemo(() => {
-    const counts = new Map<string, number>();
-    currentOrders.forEach((o) => {
-      (o.order_items || []).forEach((item: any) => {
-        const cat = productCategoryByName.get(item.product_name?.toLowerCase()) || "Boshqalar";
-        counts.set(cat, (counts.get(cat) ?? 0) + 1);
-      });
-    });
-    return Array.from(counts.entries())
-      .sort((a, b) => b[1] - a[1])
-      .slice(0, 6)
-      .map(([label, value], i) => ({ label, value, color: CHART_PALETTE[i % CHART_PALETTE.length] }));
-  }, [currentOrders, productCategoryByName]);
 
   // --- Seller ranking ------------------------------------------------
   const sellerRanking = useMemo(() => {
@@ -631,16 +611,7 @@ const Statistics = () => {
           </div>
         )}
 
-        {isAdminOrRop && (
-          <div className="grid gap-4 xl:grid-cols-10">
-            <div className="xl:col-span-6">
-              <SellerRankingTable rows={sellerRanking} onRowClick={handleViewSellerOrders} />
-            </div>
-            <div className="xl:col-span-4">
-              <DonutCard title="Zakaz turlari" icon={<Boxes className="h-4 w-4 text-muted-foreground" />} unitLabel="ta" slices={orderTypeSlices} />
-            </div>
-          </div>
-        )}
+        {isAdminOrRop && <SellerRankingTable rows={sellerRanking} onRowClick={handleViewSellerOrders} />}
 
         <Dialog open={leadsDialogOpen} onOpenChange={setLeadsDialogOpen}>
           <DialogContent className="max-w-4xl max-h-[90vh] overflow-y-auto">

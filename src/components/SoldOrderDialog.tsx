@@ -12,7 +12,6 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
-import { Card, CardContent } from "@/components/ui/card";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Plus, X } from "lucide-react";
 import { regionsData } from "@/lib/regions";
@@ -47,7 +46,6 @@ export function SoldOrderDialog({ open, onOpenChange, lead, newStageId, sellerNa
   const [totalAmount, setTotalAmount] = useState(0);
   const [advancePayment, setAdvancePayment] = useState(0);
   const [notes, setNotes] = useState("");
-  const [products, setProducts] = useState<any[]>([]);
   const [isSubmitting, setIsSubmitting] = useState(false);
 
   const availableDistricts: string[] = region ? regionsData[region] || [] : [];
@@ -67,26 +65,11 @@ export function SoldOrderDialog({ open, onOpenChange, lead, newStageId, sellerNa
     setTotalAmount(Number(lead.price) || 0);
     setAdvancePayment(0);
     setNotes("");
-    api.products
-      .list()
-      .then(setProducts)
-      .catch((error) => console.error("Error fetching products:", error));
   }, [open, lead]);
 
   const calculateItemPrice = () => {
     const totalQuantity = items.reduce((sum, item) => sum + item.quantity, 0);
     return totalQuantity > 0 ? totalAmount / totalQuantity : 0;
-  };
-
-  const addProductToOrder = (product: any) => {
-    const existingIndex = items.findIndex((item) => item.product_name === product.name);
-    if (existingIndex >= 0) {
-      const next = [...items];
-      next[existingIndex] = { ...next[existingIndex], quantity: next[existingIndex].quantity + 1 };
-      setItems(next);
-    } else {
-      setItems([...items.filter((item) => item.product_name !== ""), { product_name: product.name, quantity: 1 }]);
-    }
   };
 
   const updateOrderItem = (index: number, field: "product_name" | "quantity", value: any) => {
@@ -273,30 +256,14 @@ export function SoldOrderDialog({ open, onOpenChange, lead, newStageId, sellerNa
 
           <div className="space-y-4 border-t pt-4">
             <div>
-              <Label>Mahsulotlarni tanlang *</Label>
-              <p className="mb-2 text-xs text-muted-foreground">Mahsulotni tanlang yoki qo'lda kiriting</p>
+              <Label>Mahsulotlarni kiriting *</Label>
             </div>
 
-            <div className="grid max-h-[200px] grid-cols-2 gap-3 overflow-y-auto rounded-md border p-1">
-              {products.map((product) => (
-                <Card
-                  key={product.id}
-                  className="cursor-pointer overflow-hidden transition-colors hover:border-primary"
-                  onClick={() => addProductToOrder(product)}
-                >
-                  <CardContent className="p-3">
-                    <h4 className="line-clamp-1 text-sm font-medium">{product.name}</h4>
-                  </CardContent>
-                </Card>
-              ))}
-            </div>
-
-            {items.length > 0 && items.some((item) => item.product_name) && (
+            {items.length > 0 && (
               <div className="space-y-2 border-t pt-4">
                 <Label>Tanlangan mahsulotlar</Label>
                 {items
                   .map((item, index) => ({ item, index }))
-                  .filter(({ item }) => item.product_name)
                   .map(({ item, index }) => (
                     <div key={index} className="flex items-center gap-2">
                       <div className="flex-1">

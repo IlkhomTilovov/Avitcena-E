@@ -6,8 +6,6 @@ import { BrowserRouter, Routes, Route } from "react-router-dom";
 import Dashboard from "./pages/Dashboard";
 import Auth from "./pages/Auth";
 import Leads from "./pages/Leads";
-import Products from "./pages/Products";
-import Orders from "./pages/Orders";
 import AllOrders from "./pages/AllOrders";
 import Profile from "./pages/Profile";
 import Admin from "./pages/Admin";
@@ -15,9 +13,6 @@ import Tasks from "./pages/Tasks";
 import Sellers from "./pages/Sellers";
 import EmployeeDetail from "./pages/EmployeeDetail";
 import Statistics from "./pages/Statistics";
-import Inventory from "./pages/Inventory";
-import DeliveryKanban from "./pages/delivery/DeliveryKanban";
-import Couriers from "./pages/delivery/Couriers";
 import Privacy from "./pages/Privacy";
 import NotFound from "./pages/NotFound";
 import { OrderStatusNotificationProvider } from "./components/OrderStatusNotificationProvider";
@@ -37,7 +32,6 @@ const App = () => (
               <Route path="/" element={<Dashboard />} />
               <Route path="/auth" element={<Auth />} />
               <Route path="/leads" element={<Leads />} />
-              <Route path="/products" element={<Products />} />
               <Route path="/all-orders" element={<AllOrders />} />
               <Route path="/profile" element={<Profile />} />
               <Route path="/admin" element={<Admin />} />
@@ -45,9 +39,6 @@ const App = () => (
               <Route path="/sellers" element={<Sellers />} />
               <Route path="/sellers/:id" element={<EmployeeDetail />} />
               <Route path="/statistics" element={<Statistics />} />
-              <Route path="/inventory" element={<Inventory />} />
-              <Route path="/delivery" element={<DeliveryKanban />} />
-              <Route path="/delivery/couriers" element={<Couriers />} />
               {/* Ommaviy sahifa: Meta ilovasini nashr qilish uchun kerak, login talab qilmaydi */}
               <Route path="/privacy" element={<Privacy />} />
               {/* ADD ALL CUSTOM ROUTES ABOVE THE CATCH-ALL "*" ROUTE */}

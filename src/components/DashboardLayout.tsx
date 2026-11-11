@@ -15,11 +15,8 @@ import {
   CheckSquare,
   UserCog,
   BarChart3,
-  Warehouse,
   ChevronRight,
   ChevronsLeft,
-  Truck,
-  Bike,
 } from "lucide-react";
 import { toast } from "sonner";
 import { useUserRoles } from "@/hooks/useUserRoles";
@@ -156,9 +153,7 @@ const DashboardLayout = ({ children, headerExtra }: DashboardLayoutProps) => {
       label: "Savdo",
       items: [
         { path: "/leads", icon: Users, label: "Lidlar", badge: leadsCount > 0 ? leadsCount : undefined, badgeVariant: "secondary" },
-        { path: "/products", icon: Package, label: "Mahsulotlar" },
         { path: "/all-orders", icon: ShoppingCart, label: "Barcha zakazlar" },
-        ...(isAdminOrRop ? [{ path: "/inventory", icon: Warehouse, label: "Ombor" }] : []),
       ],
     },
     {
@@ -176,13 +171,6 @@ const DashboardLayout = ({ children, headerExtra }: DashboardLayoutProps) => {
           },
         ]
       : []),
-    {
-      label: "Dastavka",
-      items: [
-        { path: "/delivery", icon: Truck, label: "Dastavka" },
-        { path: "/delivery/couriers", icon: Bike, label: "Kuryerlar" },
-      ],
-    },
     {
       label: "Tizim",
       items: [
